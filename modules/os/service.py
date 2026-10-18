@@ -1,7 +1,8 @@
 from fastapi import HTTPException
 from core.database import supabase
 from datetime import datetime
-from .schemas import OSCreate, OSUpdate, OSItemCreate
+from .schemas import OSCreate, OSUpdate, OSItemCreate, OSItemUpdate
+
 
 def listar_os(empresa_id: str, status: str = None, search: str = None, skip: int = 0, limit: int = 50):
     """O Radar do Pátio: Puxa as OS com paginação pesada e auditoria de volume total."""
@@ -122,7 +123,32 @@ def adicionar_item(os_id: str, empresa_id: str, item: OSItemCreate):
     recalcular_totais_os(os_id)
     return response.data[0]
 
+def atualizar_item(os_id: str, item_id: str, empresa_id: str, dados: OSItemUpdate):
+    item_res = supabase.table("os_itens").select("*").eq("id", item_id).eq("os_id", os_id).eq("empresa_id", empresa_id).execute().data
+    if not item_res:
+        raise HTTPException(status_code=404, detail="Item não encontrado.")
+    item_atual = item_res[0]
+
+    campos = dados.model_dump(exclude_unset=True, mode='json')
+    if not campos:
+        return item_atual
+
+    if "quantidade" in campos and item_atual.get("estoque_id"):
+        diff_qtd = campos["quantidade"] - item_atual["quantidade"]
+        if diff_qtd != 0:
+            est_res = supabase.table("estoque").select("quantidade").eq("id", item_atual["estoque_id"]).eq("empresa_id", empresa_id).execute().data
+            if est_res:
+                saldo_atual = est_res[0]["quantidade"]
+                if diff_qtd > 0 and saldo_atual < diff_qtd:
+                    raise HTTPException(status_code=400, detail=f"Estoque insuficiente. Saldo atual: {saldo_atual}")
+                supabase.table("estoque").update({"quantidade": saldo_atual - diff_qtd}).eq("id", item_atual["estoque_id"]).eq("empresa_id", empresa_id).execute()
+
+    response = supabase.table("os_itens").update(campos).eq("id", item_id).eq("os_id", os_id).eq("empresa_id", empresa_id).execute()
+    recalcular_totais_os(os_id)
+    return response.data[0]
+
 def remover_item(os_id: str, item_id: str, empresa_id: str):
+
     item_res = supabase.table("os_itens").select("*").eq("id", item_id).eq("os_id", os_id).eq("empresa_id", empresa_id).execute().data
     if not item_res:
         raise HTTPException(status_code=404, detail="Item não encontrado.")

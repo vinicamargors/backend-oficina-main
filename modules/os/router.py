@@ -47,9 +47,14 @@ def deletar_ordem_servico(
 def adicionar_item_os(empresa_id: UUID, os_id: UUID, item: schemas.OSItemCreate):
     return service.adicionar_item(str(os_id), str(empresa_id), item)
 
+@router.put("/{empresa_id}/{os_id}/itens/{item_id}")
+def atualizar_item_os(empresa_id: UUID, os_id: UUID, item_id: UUID, item: schemas.OSItemUpdate):
+    return service.atualizar_item(str(os_id), str(item_id), str(empresa_id), item)
+
 @router.delete("/{empresa_id}/{os_id}/itens/{item_id}")
 def remover_item_os(empresa_id: UUID, os_id: UUID, item_id: UUID):
     return service.remover_item(str(os_id), str(item_id), str(empresa_id))
+
 
 @router.get("/{empresa_id}/{os_id}/imprimir", response_model=schemas.OSDossieResponse)
 def imprimir_os(empresa_id: UUID, os_id: UUID):

@@ -26,6 +26,14 @@ class OSItemCreate(BaseModel):
     custo_unitario: float = Field(default=0.0)
     venda_unitario: float = Field(default=0.0)
 
+class OSItemUpdate(BaseModel):
+    tipo: Optional[Literal['PECA', 'MAO_OBRA', 'TERCEIRIZADO']] = None
+    nome_item: Optional[str] = None
+    quantidade: Optional[int] = Field(default=None, gt=0)
+    custo_unitario: Optional[float] = None
+    venda_unitario: Optional[float] = None
+
+
 class OSDossieResponse(BaseModel):
     ordem: dict  # Vai conter os dados da OS + Join do Cliente, Veículo e Mecânico
     itens: List[dict] # Lista de peças e serviços
