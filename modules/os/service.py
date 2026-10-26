@@ -1,10 +1,22 @@
 from fastapi import HTTPException
 from core.database import supabase
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+from typing import List
 from .schemas import OSCreate, OSUpdate, OSItemCreate, OSItemUpdate
 
 
-def listar_os(empresa_id: str, status: str = None, search: str = None, skip: int = 0, limit: int = 50):
+def listar_os(
+    empresa_id: str,
+    status: str = None,
+    search: str = None,
+    data_inicio: str = None,
+    data_fim: str = None,
+    valor_min: float = None,
+    valor_max: float = None,
+    ordenacao: str = "data_desc",
+    skip: int = 0,
+    limit: int = 50
+):
     """O Radar do Pátio: Puxa as OS com paginação pesada e auditoria de volume total."""
     query = supabase.table("ordens_servico").select(
         "id, status, data_abertura, total_geral, descricao_problema, clientes(nome, telefone), veiculos(placa, modelo)",
@@ -13,12 +25,27 @@ def listar_os(empresa_id: str, status: str = None, search: str = None, skip: int
 
     if status:
         query = query.eq("status", status.upper())
+    if data_inicio:
+        query = query.gte("data_abertura", f"{data_inicio}T00:00:00")
+    if data_fim:
+        query = query.lte("data_abertura", f"{data_fim}T23:59:59")
+    if valor_min is not None:
+        query = query.gte("total_geral", valor_min)
+    if valor_max is not None:
+        query = query.lte("total_geral", valor_max)
 
-    query = query.order("data_abertura", desc=True)
+    if ordenacao == "data_asc":
+        query = query.order("data_abertura", desc=False)
+    elif ordenacao == "valor_desc":
+        query = query.order("total_geral", desc=True)
+    elif ordenacao == "valor_asc":
+        query = query.order("total_geral", desc=False)
+    else:
+        query = query.order("data_abertura", desc=True)
 
     # 1. MODO BUSCA ATIVADA (Mantido em memória — Armadilha #4: PostgREST não aceita .or_() em joins)
     if search:
-        response = query.limit(1000).execute()
+        response = query.limit(5000).execute()
         todas_os = response.data
         termo = search.lower()
         filtradas = []
@@ -77,9 +104,18 @@ def _sincronizar_km_veiculo(veiculo_id: str, empresa_id: str, km_novo: int):
         supabase.table("veiculos").update({"km_atual": km_novo}).eq("id", str(veiculo_id)).eq("empresa_id", str(empresa_id)).execute()
 
 def criar_os(dados: OSCreate):
-    os_aberta = supabase.table("ordens_servico").select("id").eq("veiculo_id", str(dados.veiculo_id)).eq("status", "ORCAMENTO").eq("empresa_id", str(dados.empresa_id)).execute()
+    os_aberta = supabase.table("ordens_servico").select("id, data_abertura, status").eq("veiculo_id", str(dados.veiculo_id)).eq("status", "ORCAMENTO").eq("empresa_id", str(dados.empresa_id)).order("data_abertura", desc=True).execute()
     if os_aberta.data:
-        raise HTTPException(status_code=409, detail="Este veículo já possui um orçamento aberto na oficina.")
+        orc_recente = os_aberta.data[0]
+        abertura_str = orc_recente.get("data_abertura")
+        if abertura_str:
+            try:
+                abertura_dt = datetime.fromisoformat(str(abertura_str).replace("Z", "+00:00"))
+                agora = datetime.now(abertura_dt.tzinfo or timezone.utc)
+                if (agora - abertura_dt) < timedelta(days=90):
+                    return {**orc_recente, "reaproveitada": True}
+            except ValueError:
+                pass
 
     _sincronizar_km_veiculo(str(dados.veiculo_id), str(dados.empresa_id), dados.km_atual)
 
@@ -123,8 +159,30 @@ def adicionar_item(os_id: str, empresa_id: str, item: OSItemCreate):
     recalcular_totais_os(os_id)
     return response.data[0]
 
+def adicionar_itens_lote(os_id: str, empresa_id: str, itens: List[OSItemCreate]):
+    if not itens:
+        return []
+    inseridos = []
+    for item in itens:
+        if item.estoque_id:
+            estoque_res = supabase.table("estoque").select("*").eq("id", str(item.estoque_id)).eq("empresa_id", empresa_id).execute().data
+            if not estoque_res:
+                raise HTTPException(status_code=404, detail=f"Item de estoque '{item.nome_item}' não encontrado.")
+            estoque = estoque_res[0]
+            if estoque["quantidade"] < item.quantidade:
+                raise HTTPException(status_code=400, detail=f"Estoque insuficiente para '{item.nome_item}'. Saldo atual: {estoque['quantidade']}")
+            supabase.table("estoque").update({"quantidade": estoque["quantidade"] - item.quantidade}).eq("id", str(item.estoque_id)).eq("empresa_id", empresa_id).execute()
+
+        dados_item = item.model_dump(mode='json')
+        dados_item.update({"os_id": os_id, "empresa_id": empresa_id})
+        inseridos.append(dados_item)
+
+    response = supabase.table("os_itens").insert(inseridos).execute()
+    recalcular_totais_os(os_id)
+    return response.data
+
 def atualizar_item(os_id: str, item_id: str, empresa_id: str, dados: OSItemUpdate):
-    item_res = supabase.table("os_itens").select("*").eq("id", item_id).eq("os_id", os_id).eq("empresa_id", empresa_id).execute().data
+    item_res = supabase.table("os_itens").select("*").eq("id", item_id).eq("os_id", os_id).execute().data
     if not item_res:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
     item_atual = item_res[0]
@@ -143,13 +201,13 @@ def atualizar_item(os_id: str, item_id: str, empresa_id: str, dados: OSItemUpdat
                     raise HTTPException(status_code=400, detail=f"Estoque insuficiente. Saldo atual: {saldo_atual}")
                 supabase.table("estoque").update({"quantidade": saldo_atual - diff_qtd}).eq("id", item_atual["estoque_id"]).eq("empresa_id", empresa_id).execute()
 
-    response = supabase.table("os_itens").update(campos).eq("id", item_id).eq("os_id", os_id).eq("empresa_id", empresa_id).execute()
+    response = supabase.table("os_itens").update(campos).eq("id", item_id).eq("os_id", os_id).execute()
     recalcular_totais_os(os_id)
     return response.data[0]
 
 def remover_item(os_id: str, item_id: str, empresa_id: str):
 
-    item_res = supabase.table("os_itens").select("*").eq("id", item_id).eq("os_id", os_id).eq("empresa_id", empresa_id).execute().data
+    item_res = supabase.table("os_itens").select("*").eq("id", item_id).eq("os_id", os_id).execute().data
     if not item_res:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
     item = item_res[0]
@@ -159,7 +217,7 @@ def remover_item(os_id: str, item_id: str, empresa_id: str):
         if est_res:
             supabase.table("estoque").update({"quantidade": est_res[0]["quantidade"] + item["quantidade"]}).eq("id", item["estoque_id"]).eq("empresa_id", empresa_id).execute()
 
-    supabase.table("os_itens").delete().eq("id", item_id).eq("empresa_id", empresa_id).execute()
+    supabase.table("os_itens").delete().eq("id", item_id).eq("os_id", os_id).execute()
     recalcular_totais_os(os_id)
     return {"status": "sucesso", "detail": "Item removido e estornado (se aplicável)."}
 
@@ -170,14 +228,14 @@ def deletar_os(os_id: str, empresa_id: str, motivo_exclusao: str):
     os_atual = os_res[0]
 
     # Devolve as peças pro estoque e apaga os itens direto sem recalcular totais da OS que vai morrer (Achado #6)
-    itens = supabase.table("os_itens").select("id, estoque_id, quantidade").eq("os_id", os_id).eq("empresa_id", empresa_id).execute().data
+    itens = supabase.table("os_itens").select("id, estoque_id, quantidade").eq("os_id", os_id).execute().data
     for item in itens:
         if item.get("estoque_id"):
             est_res = supabase.table("estoque").select("quantidade").eq("id", item["estoque_id"]).eq("empresa_id", empresa_id).execute().data
             if est_res:
                 supabase.table("estoque").update({"quantidade": est_res[0]["quantidade"] + item["quantidade"]}).eq("id", item["estoque_id"]).eq("empresa_id", empresa_id).execute()
 
-    supabase.table("os_itens").delete().eq("os_id", os_id).eq("empresa_id", empresa_id).execute()
+    supabase.table("os_itens").delete().eq("os_id", os_id).execute()
 
     # Armadilha #3: Mantém insert explícito na audit_logs com motivo_exclusao
     os_atual["motivo_exclusao"] = motivo_exclusao
@@ -201,7 +259,7 @@ def obter_dossie_impressao(os_id: str, empresa_id: str):
     if not response_os.data:
         raise HTTPException(status_code=404, detail="Ordem de Serviço não encontrada.")
 
-    itens = supabase.table("os_itens").select("*").eq("os_id", os_id).eq("empresa_id", empresa_id).execute().data
+    itens = supabase.table("os_itens").select("*").eq("os_id", os_id).execute().data
     empresa = supabase.table("empresas").select(
         "nome_fantasia, razao_social, cnpj, telefone, email, endereco"
     ).eq("id", empresa_id).execute().data

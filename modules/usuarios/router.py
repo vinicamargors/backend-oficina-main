@@ -21,3 +21,12 @@ def post_usuario(empresa_id: UUID, usuario: schemas.UsuarioCreate):
 @router.put("/{empresa_id}/{usuario_id}", response_model=schemas.UsuarioResponse, dependencies=[Depends(exigir_cargos("DONO", "master"))])
 def put_usuario(empresa_id: UUID, usuario_id: UUID, usuario: schemas.UsuarioUpdate):
     return service.atualizar_usuario(str(usuario_id), str(empresa_id), usuario)
+
+@router.delete("/{empresa_id}/{usuario_id}", dependencies=[Depends(exigir_cargos("DONO", "master"))])
+def delete_usuario(empresa_id: UUID, usuario_id: UUID):
+    return service.desativar_usuario(str(usuario_id), str(empresa_id))
+
+@router.patch("/{empresa_id}/{usuario_id}/reativar", dependencies=[Depends(exigir_cargos("DONO", "master"))])
+def patch_reativar_usuario(empresa_id: UUID, usuario_id: UUID):
+    return service.reativar_usuario(str(usuario_id), str(empresa_id))
+

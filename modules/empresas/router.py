@@ -27,6 +27,10 @@ def put_empresa(empresa_id: UUID, empresa: schemas.EmpresaUpdate, usuario: dict 
 def delete_empresa(empresa_id: UUID):
     return service.deletar_empresa(str(empresa_id))
 
+@router.get("/{empresa_id}/configuracoes")
+def get_configuracoes(empresa_id: UUID):
+    return service.obter_configuracoes(str(empresa_id))
+
 @router.put("/{empresa_id}/configuracoes", dependencies=[Depends(exigir_cargos("DONO", "master"))])
 def put_configuracoes(empresa_id: UUID, config: schemas.ConfigUpdate):
     return service.atualizar_configuracoes(str(empresa_id), config)

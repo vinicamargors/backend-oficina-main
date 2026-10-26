@@ -12,6 +12,8 @@ from modules.usuarios import router as usuarios_router
 from modules.logs import router as logs_router
 from modules.dashboards import router as dashboards_router
 from modules.financeiro import router as financeiro_router
+from modules.transacoes_financeiras import router as transacoes_financeiras_router
+from modules.equipe import router as equipe_router
 from modules.bot import router as bot_router
 
 
@@ -40,6 +42,8 @@ app.include_router(usuarios_router.router, prefix="/api/v1/usuarios", tags=["Usu
 app.include_router(logs_router.router, prefix="/api/v1/logs", tags=["Auditoria e Logs"])
 app.include_router(dashboards_router.router, prefix="/api/v1/dashboards", tags=["Módulo Operacional / Dashboards"])
 app.include_router(financeiro_router.router, prefix="/api/v1/financeiro", tags=["Módulo Estratégico / Financeiro"])
+app.include_router(transacoes_financeiras_router.router, prefix="/api/v1/transacoes-financeiras", tags=["Contas a Pagar e Receber"])
+app.include_router(equipe_router.router, prefix="/api/v1/equipe", tags=["Equipe, RH e Ponto"])
 app.include_router(bot_router.router, prefix="/api/v1/bot", tags=["Bot de Atendimento"])
 
 

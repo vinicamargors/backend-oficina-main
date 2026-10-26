@@ -4,7 +4,7 @@ from uuid import UUID
 
 class EstoqueBase(BaseModel):
     nome: str
-    categoria: Literal['PECAS', 'FLUIDOS', 'PNEUS', 'ELETRICA', 'MAO_OBRA'] = 'PECAS'
+    categoria: str = 'PECAS'
     quantidade: int = Field(default=0, ge=0)
     custo: float = Field(default=0.0, ge=0.0)
     venda: float = Field(default=0.0, ge=0.0)
@@ -17,7 +17,7 @@ class EstoqueCreate(EstoqueBase):
 
 class EstoqueUpdate(BaseModel):
     nome: Optional[str] = None
-    categoria: Optional[Literal['PECAS', 'FLUIDOS', 'PNEUS', 'ELETRICA', 'MAO_OBRA']] = None
+    categoria: Optional[str] = None
     quantidade: Optional[int] = Field(None, ge=0)
     custo: Optional[float] = Field(None, ge=0.0)
     venda: Optional[float] = Field(None, ge=0.0)

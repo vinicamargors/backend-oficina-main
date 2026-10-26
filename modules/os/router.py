@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 from . import schemas, service
 from core.security import validar_passaporte
@@ -15,6 +15,11 @@ def listar_ordens_servico(
     empresa_id: UUID = Query(..., description="ID da empresa (Obrigatório para isolar os dados)"),
     status: Optional[str] = Query(None, description="Filtra por: ORCAMENTO, EXECUCAO, FINALIZADO, PAGO"),
     search: Optional[str] = Query(None, description="Busca rápida por placa, ID ou nome do cliente"),
+    data_inicio: Optional[str] = Query(None, description="Data inicial ISO (YYYY-MM-DD)"),
+    data_fim: Optional[str] = Query(None, description="Data final ISO (YYYY-MM-DD)"),
+    valor_min: Optional[float] = Query(None, description="Valor mínimo da OS"),
+    valor_max: Optional[float] = Query(None, description="Valor máximo da OS"),
+    ordenacao: Optional[str] = Query("data_desc", description="data_desc, data_asc, valor_desc, valor_asc"),
     skip: int = Query(0, description="Para paginação: quantos registros pular"),
     limit: int = Query(50, description="Limite de registros por tela")
 ):
@@ -25,7 +30,12 @@ def listar_ordens_servico(
     return service.listar_os(
         empresa_id=str(empresa_id), 
         status=status, 
-        search=search, 
+        search=search,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        valor_min=valor_min,
+        valor_max=valor_max,
+        ordenacao=ordenacao or "data_desc",
         skip=skip, 
         limit=limit
     )
@@ -46,6 +56,10 @@ def deletar_ordem_servico(
 @router.post("/{empresa_id}/{os_id}/itens")
 def adicionar_item_os(empresa_id: UUID, os_id: UUID, item: schemas.OSItemCreate):
     return service.adicionar_item(str(os_id), str(empresa_id), item)
+
+@router.post("/{empresa_id}/{os_id}/itens/lote")
+def adicionar_itens_lote_os(empresa_id: UUID, os_id: UUID, itens: List[schemas.OSItemCreate]):
+    return service.adicionar_itens_lote(str(os_id), str(empresa_id), itens)
 
 @router.put("/{empresa_id}/{os_id}/itens/{item_id}")
 def atualizar_item_os(empresa_id: UUID, os_id: UUID, item_id: UUID, item: schemas.OSItemUpdate):

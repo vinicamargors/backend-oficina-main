@@ -90,6 +90,23 @@ def obter_detalhes(empresa_id: str):
 
     return {"empresa": emp_res[0], "configuracao": config[0] if config else {}, "usuarios": usuarios, "estatisticas": stats}
 
+def obter_configuracoes(empresa_id: str):
+    config = supabase.table("configuracoes_empresa").select("*").eq("empresa_id", empresa_id).execute().data
+    if config:
+        return config[0]
+    return {
+        "empresa_id": empresa_id,
+        "cor_primaria": "#1e3a8a",
+        "cor_secundaria": "#f97316",
+        "raio_gps_metros": 100,
+        "dia_pagamento_folha": 5,
+        "dia_adiantamento_folha": 20,
+        "comissao_global_servico_pct": 15.0,
+        "comissao_global_peca_pct": 5.0,
+        "paga_hora_extra_padrao": True,
+        "valor_hora_extra_padrao": 25.0
+    }
+
 def atualizar_configuracoes(empresa_id: str, dados: ConfigUpdate):
     campos = dados.model_dump(exclude_unset=True, mode='json')
     existente = supabase.table("configuracoes_empresa").select("id").eq("empresa_id", empresa_id).execute().data
@@ -101,3 +118,4 @@ def atualizar_configuracoes(empresa_id: str, dados: ConfigUpdate):
         resp = supabase.table("configuracoes_empresa").insert(campos).execute()
 
     return resp.data[0]
+
