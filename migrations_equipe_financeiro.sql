@@ -222,3 +222,61 @@ BEGIN
     END IF;
 END $$;
 
+-- 7. POLÍTICA DE SEGURANÇA ESTRITA NA TABELA DE USUÁRIOS (PROTEÇÃO DE SALÁRIOS E DADOS DA EQUIPE)
+ALTER TABLE public.usuarios ENABLE ROW LEVEL SECURITY;
+
+-- Leitura: Qualquer membro da oficina autenticado pode ler a lista de usuários da sua empresa
+DO $$
+BEGIN
+    DROP POLICY IF EXISTS usuarios_select_policy ON public.usuarios;
+    CREATE POLICY usuarios_select_policy ON public.usuarios
+        FOR SELECT
+        TO authenticated
+        USING (
+            empresa_id IN (
+                SELECT empresa_id FROM public.usuarios WHERE id = auth.uid()
+            )
+        );
+END $$;
+
+-- Modificação (UPDATE): APENAS DONO OU MASTER PODEM ALTERAR DADOS NA TABELA DE USUÁRIOS
+-- Mecânicos e Atendentes NÃO possuem permissão para alterar salários, comissões, cargos ou usuários!
+DO $$
+BEGIN
+    DROP POLICY IF EXISTS usuarios_update_gestor_only ON public.usuarios;
+    CREATE POLICY usuarios_update_gestor_only ON public.usuarios
+        FOR UPDATE
+        TO authenticated
+        USING (
+            (SELECT cargo FROM public.usuarios WHERE id = auth.uid()) IN ('DONO', 'master')
+        )
+        WITH CHECK (
+            (SELECT cargo FROM public.usuarios WHERE id = auth.uid()) IN ('DONO', 'master')
+        );
+END $$;
+
+-- Criação (INSERT): Apenas DONO ou MASTER
+DO $$
+BEGIN
+    DROP POLICY IF EXISTS usuarios_insert_gestor_only ON public.usuarios;
+    CREATE POLICY usuarios_insert_gestor_only ON public.usuarios
+        FOR INSERT
+        TO authenticated
+        WITH CHECK (
+            (SELECT cargo FROM public.usuarios WHERE id = auth.uid()) IN ('DONO', 'master')
+        );
+END $$;
+
+-- Exclusão (DELETE): Apenas DONO ou MASTER
+DO $$
+BEGIN
+    DROP POLICY IF EXISTS usuarios_delete_gestor_only ON public.usuarios;
+    CREATE POLICY usuarios_delete_gestor_only ON public.usuarios
+        FOR DELETE
+        TO authenticated
+        USING (
+            (SELECT cargo FROM public.usuarios WHERE id = auth.uid()) IN ('DONO', 'master')
+        );
+END $$;
+
+
