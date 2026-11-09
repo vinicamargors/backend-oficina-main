@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from typing import Optional
 from uuid import UUID
 from . import schemas, service
-from core.security import validar_passaporte
+from core.security import validar_passaporte, empresa_do_usuario
 
 router = APIRouter(dependencies=[Depends(validar_passaporte)])
 
@@ -15,7 +15,8 @@ def get_item_estoque(empresa_id: UUID, item_id: UUID):
     return service.obter_item(str(item_id), str(empresa_id))
 
 @router.post("/", response_model=schemas.EstoqueResponse)
-def post_item(item: schemas.EstoqueCreate):
+def post_item(item: schemas.EstoqueCreate, usuario: dict = Depends(validar_passaporte)):
+    item.empresa_id = empresa_do_usuario(usuario, item.empresa_id)
     return service.criar_item(item)
 
 @router.put("/{empresa_id}/{item_id}", response_model=schemas.EstoqueResponse)

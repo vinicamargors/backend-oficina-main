@@ -141,7 +141,12 @@ def atualizar_os(os_id: str, empresa_id: str, dados: OSUpdate):
     response = supabase.table("ordens_servico").update(campos).eq("id", os_id).eq("empresa_id", empresa_id).execute()
     return response.data[0]
 
+def _garantir_os_da_empresa(os_id: str, empresa_id: str):
+    if not supabase.table("ordens_servico").select("id").eq("id", os_id).eq("empresa_id", empresa_id).execute().data:
+        raise HTTPException(status_code=404, detail="Ordem de Serviço não encontrada.")
+
 def adicionar_item(os_id: str, empresa_id: str, item: OSItemCreate):
+    _garantir_os_da_empresa(os_id, empresa_id)
     if item.estoque_id:
         estoque_res = supabase.table("estoque").select("*").eq("id", str(item.estoque_id)).eq("empresa_id", empresa_id).execute().data
         if not estoque_res:
@@ -162,6 +167,7 @@ def adicionar_item(os_id: str, empresa_id: str, item: OSItemCreate):
 def adicionar_itens_lote(os_id: str, empresa_id: str, itens: List[OSItemCreate]):
     if not itens:
         return []
+    _garantir_os_da_empresa(os_id, empresa_id)
     inseridos = []
     for item in itens:
         if item.estoque_id:
@@ -182,7 +188,7 @@ def adicionar_itens_lote(os_id: str, empresa_id: str, itens: List[OSItemCreate])
     return response.data
 
 def atualizar_item(os_id: str, item_id: str, empresa_id: str, dados: OSItemUpdate):
-    item_res = supabase.table("os_itens").select("*").eq("id", item_id).eq("os_id", os_id).execute().data
+    item_res = supabase.table("os_itens").select("*").eq("id", item_id).eq("os_id", os_id).eq("empresa_id", empresa_id).execute().data
     if not item_res:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
     item_atual = item_res[0]
@@ -207,7 +213,7 @@ def atualizar_item(os_id: str, item_id: str, empresa_id: str, dados: OSItemUpdat
 
 def remover_item(os_id: str, item_id: str, empresa_id: str):
 
-    item_res = supabase.table("os_itens").select("*").eq("id", item_id).eq("os_id", os_id).execute().data
+    item_res = supabase.table("os_itens").select("*").eq("id", item_id).eq("os_id", os_id).eq("empresa_id", empresa_id).execute().data
     if not item_res:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
     item = item_res[0]
