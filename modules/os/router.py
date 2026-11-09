@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, Query
 from typing import Optional, List
 from uuid import UUID
 from . import schemas, service
-from core.security import validar_passaporte
+from core.security import validar_passaporte, empresa_do_usuario
 
 router = APIRouter(dependencies=[Depends(validar_passaporte)])
 
 @router.post("/", response_model=dict)
-def criar_ordem_servico(os: schemas.OSCreate):
+def criar_ordem_servico(os: schemas.OSCreate, usuario: dict = Depends(validar_passaporte)):
+    os.empresa_id = empresa_do_usuario(usuario, os.empresa_id)
     return service.criar_os(os)
 
 @router.get("/", response_model=schemas.OSPaginatedResponse)

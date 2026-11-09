@@ -115,3 +115,38 @@ def reativar_usuario(usuario_id: str, empresa_id: str):
         raise HTTPException(status_code=404, detail="Funcionário não encontrado.")
     return {"status": "sucesso", "detail": "Funcionário reativado com sucesso."}
 
+
+def onboarding_oficina(auth_user):
+    """Cria oficina + configuração + perfil DONO para quem acabou de criar conta no Supabase Auth."""
+    existente = supabase.table("usuarios").select("*").eq("id", auth_user.id).execute().data
+    if existente:
+        existente[0].pop("senha_hash", None)
+        return existente[0]
+
+    if auth_user.email and supabase.table("usuarios").select("id").eq("email", auth_user.email).execute().data:
+        raise HTTPException(status_code=409, detail="Já existe um perfil com este e-mail. Contate o administrador da oficina.")
+
+    meta = auth_user.user_metadata or {}
+    nome = (meta.get("nome") or (auth_user.email or "").split("@")[0] or "Responsável").strip()
+    nome_oficina = (meta.get("nome_fantasia") or f"Oficina {nome}").strip()
+    telefone = limpar_telefone(meta.get("telefone")) or None
+
+    empresa = supabase.table("empresas").insert({
+        "nome_fantasia": nome_oficina, "email": auth_user.email, "telefone": telefone,
+        "plano": "basico", "ativo": True,
+    }).execute().data[0]
+    try:
+        supabase.table("configuracoes_empresa").insert({
+            "empresa_id": empresa["id"], "nome_exibicao": nome_oficina,
+            "cor_primaria": "#1e3a8a", "cor_secundaria": "#f97316",
+        }).execute()
+        perfil = supabase.table("usuarios").insert({
+            "id": auth_user.id, "nome": nome, "email": auth_user.email, "telefone": telefone,
+            "cargo": "DONO", "ativo": True, "empresa_id": empresa["id"],
+        }).execute().data[0]
+    except Exception:
+        supabase.table("configuracoes_empresa").delete().eq("empresa_id", empresa["id"]).execute()
+        supabase.table("empresas").delete().eq("id", empresa["id"]).execute()
+        raise
+    perfil.pop("senha_hash", None)
+    return perfil

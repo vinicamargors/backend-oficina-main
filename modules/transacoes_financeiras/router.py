@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
 from uuid import UUID
-from core.security import exigir_cargos
+from core.security import exigir_cargos, empresa_do_usuario
 from . import schemas, service
 
 router = APIRouter(dependencies=[Depends(exigir_cargos("DONO", "FINANCEIRO", "master"))])
@@ -17,7 +17,8 @@ def get_transacoes(
     return service.listar_transacoes(str(empresa_id), tipo, status, data_inicial, data_final)
 
 @router.post("/", response_model=schemas.TransacaoResponse)
-def post_transacao(dados: schemas.TransacaoCreate):
+def post_transacao(dados: schemas.TransacaoCreate, usuario: dict = Depends(exigir_cargos("DONO", "FINANCEIRO", "master"))):
+    dados.empresa_id = empresa_do_usuario(usuario, dados.empresa_id)
     return service.criar_transacao(dados)
 
 @router.put("/{empresa_id}/{item_id}", response_model=schemas.TransacaoResponse)

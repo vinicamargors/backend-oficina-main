@@ -38,6 +38,7 @@ app.include_router(veiculos_router.router, prefix="/api/v1/veiculos", tags=["Ve�
 app.include_router(os_router.router, prefix="/api/v1/os", tags=["Ordens de Serviço"])
 app.include_router(estoque_router.router, prefix="/api/v1/estoque", tags=["Estoque"])
 app.include_router(empresas_router.router, prefix="/api/v1/empresas", tags=["Empresas / SaaS"])
+app.include_router(usuarios_router.onboarding_router, prefix="/api/v1/usuarios", tags=["Usuários / RH"])
 app.include_router(usuarios_router.router, prefix="/api/v1/usuarios", tags=["Usuários / RH"])
 app.include_router(logs_router.router, prefix="/api/v1/logs", tags=["Auditoria e Logs"])
 app.include_router(dashboards_router.router, prefix="/api/v1/dashboards", tags=["Módulo Operacional / Dashboards"])

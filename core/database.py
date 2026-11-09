@@ -6,11 +6,9 @@ from supabase import create_client, Client
 load_dotenv()
 
 url: str = os.environ.get("SUPABASE_URL")
-key: str = os.environ.get("SUPABASE_KEY")
 service_key: str = os.environ.get("SUPABASE_SERVICE_KEY")
 
-# Mão invisível conectando seu backend ao banco
-supabase: Client = create_client(url, key)
-
-# O Dono do Cofre (pode criar usuários no Auth ignorando regras de Row Level Security)
-supabase_admin: Client = create_client(url, service_key)
+# Backend usa só a service_role: o RLS fica fechado para anon e o isolamento por empresa
+# é garantido em core/security.py (validar_passaporte).
+supabase: Client = create_client(url, service_key)
+supabase_admin: Client = supabase
