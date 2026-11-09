@@ -246,3 +246,45 @@ def test_clientes_ordenados_por_nome(api, token, seed_ids, admin):
         assert nomes.index("AA F3-C3") == 0 or nomes[0].lower() <= "aa f3-c3"
     finally:
         admin.table("clientes").delete().in_("id", [c["id"] for c in temp]).execute()
+
+
+@pytest.mark.cenario("F3-F4", "Cadastro novo (sem perfil): /me nega, onboarding cria 1 oficina DONO só uma vez e isolada das demais")
+def test_onboarding_de_conta_nova(api, token, seed_ids, admin):
+    import os
+    import secrets
+    from supabase import create_client
+
+    a = seed_ids["a"]
+    email = f"f3f4.{uuid.uuid4().hex[:8]}@homolog-autotec.example.com"
+    senha = secrets.token_urlsafe(16)
+    nome_oficina = f"Oficina F3-F4 {uuid.uuid4().hex[:6]}"
+    auth_id = admin.auth.admin.create_user({"email": email, "password": senha, "email_confirm": True,
+                                            "user_metadata": {"nome": "Teste F4", "nome_fantasia": nome_oficina}}).user.id
+    try:
+        anon = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_ANON_KEY"])
+        tok = anon.auth.sign_in_with_password({"email": email, "password": senha}).session.access_token
+
+        assert api.get("/api/v1/usuarios/me", headers=_h(tok)).status_code == 403
+        r = api.post("/api/v1/usuarios/onboarding", headers=_h(tok))
+        assert r.status_code == 200, r.text
+        # a empresa nasce com empresa_teste=false: marca na hora para nunca valer como produção
+        admin.table("empresas").update({"empresa_teste": True}).eq("id", r.json()["empresa_id"]).execute()
+        assert r.json()["cargo"] == "DONO" and "senha_hash" not in r.json()
+
+        de_novo = api.post("/api/v1/usuarios/onboarding", headers=_h(tok))
+        assert de_novo.status_code == 200 and de_novo.json()["id"] == r.json()["id"]
+        assert len(admin.table("empresas").select("id").eq("nome_fantasia", nome_oficina).execute().data) == 1
+
+        assert api.get("/api/v1/usuarios/me", headers=_h(tok)).status_code == 200
+        assert api.get(f"/api/v1/clientes/{a['empresa']}", headers=_h(tok)).status_code == 403
+    finally:
+        perfil = admin.table("usuarios").select("empresa_id").eq("id", auth_id).execute().data
+        if perfil:
+            emp = perfil[0]["empresa_id"]
+            admin.table("empresas").update({"empresa_teste": True}).eq("id", emp).execute()
+            admin.table("configuracoes_empresa").delete().eq("empresa_id", emp).execute()
+            admin.table("usuarios").delete().eq("id", auth_id).execute()
+            # apagar usuário gera linha em audit_logs com empresa_id, que impede apagar a empresa
+            admin.table("audit_logs").delete().eq("empresa_id", emp).execute()
+            admin.table("empresas").delete().eq("id", emp).execute()
+        admin.auth.admin.delete_user(auth_id)
