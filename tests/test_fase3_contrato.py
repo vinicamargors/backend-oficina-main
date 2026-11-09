@@ -161,7 +161,9 @@ def test_crud_cliente_veiculo_estoque(api, token, seed_ids, admin):
         criados["est"] = est.json()["id"]
         assert api.put(f"/api/v1/estoque/{emp}/{criados['est']}", headers=_h(tok), json={"venda": 25, "codigo": None}).status_code == 200
         assert api.patch(f"/api/v1/estoque/{emp}/{criados['est']}/ajustar", headers=_h(tok), json={"tipo": "entrada", "quantidade": 3}).json()["quantidade"] == 8
-        assert api.patch(f"/api/v1/estoque/{emp}/{criados['est']}/ajustar", headers=_h(tok), json={"tipo": "saida", "quantidade": 100}).json()["quantidade"] == 0
+        # Fase 4: saída acima do saldo é recusada (antes zerava em silêncio)
+        assert api.patch(f"/api/v1/estoque/{emp}/{criados['est']}/ajustar", headers=_h(tok), json={"tipo": "saida", "quantidade": 100}).status_code == 400
+        assert api.patch(f"/api/v1/estoque/{emp}/{criados['est']}/ajustar", headers=_h(tok), json={"tipo": "saida", "quantidade": 8}).json()["quantidade"] == 0
     finally:
         for tabela, chave in (("estoque", "est"), ("veiculos", "vei"), ("clientes", "cli")):
             if chave in criados:

@@ -1,6 +1,8 @@
 from fastapi import HTTPException
+from postgrest.exceptions import APIError
 from core.database import supabase
 from core.security import garantir_da_empresa
+from core.estoque_rpc import baixar_estoque, devolver_estoque
 from datetime import datetime, timezone, timedelta
 from typing import List
 from .schemas import OSCreate, OSUpdate, OSItemCreate, OSItemUpdate
@@ -163,19 +165,17 @@ def _garantir_os_da_empresa(os_id: str, empresa_id: str):
 def adicionar_item(os_id: str, empresa_id: str, item: OSItemCreate):
     _garantir_os_da_empresa(os_id, empresa_id)
     if item.estoque_id:
-        estoque_res = supabase.table("estoque").select("*").eq("id", str(item.estoque_id)).eq("empresa_id", empresa_id).execute().data
-        if not estoque_res:
-            raise HTTPException(status_code=404, detail="Item de estoque não encontrado.")
-        estoque = estoque_res[0]
-        if estoque["quantidade"] < item.quantidade:
-            raise HTTPException(status_code=400, detail=f"Estoque insuficiente. Saldo atual: {estoque['quantidade']}")
-
-        supabase.table("estoque").update({"quantidade": estoque["quantidade"] - item.quantidade}).eq("id", str(item.estoque_id)).eq("empresa_id", empresa_id).execute()
+        baixar_estoque(str(item.estoque_id), empresa_id, item.quantidade)
 
     dados_item = item.model_dump(mode='json')
     dados_item.update({"os_id": os_id, "empresa_id": empresa_id})
 
-    response = supabase.table("os_itens").insert(dados_item).execute()
+    try:
+        response = supabase.table("os_itens").insert(dados_item).execute()
+    except Exception:
+        if item.estoque_id:
+            devolver_estoque(str(item.estoque_id), empresa_id, item.quantidade)
+        raise
     recalcular_totais_os(os_id)
     return response.data[0]
 
@@ -183,22 +183,21 @@ def adicionar_itens_lote(os_id: str, empresa_id: str, itens: List[OSItemCreate])
     if not itens:
         return []
     _garantir_os_da_empresa(os_id, empresa_id)
-    inseridos = []
-    for item in itens:
-        if item.estoque_id:
-            estoque_res = supabase.table("estoque").select("*").eq("id", str(item.estoque_id)).eq("empresa_id", empresa_id).execute().data
-            if not estoque_res:
-                raise HTTPException(status_code=404, detail=f"Item de estoque '{item.nome_item}' não encontrado.")
-            estoque = estoque_res[0]
-            if estoque["quantidade"] < item.quantidade:
-                raise HTTPException(status_code=400, detail=f"Estoque insuficiente para '{item.nome_item}'. Saldo atual: {estoque['quantidade']}")
-            supabase.table("estoque").update({"quantidade": estoque["quantidade"] - item.quantidade}).eq("id", str(item.estoque_id)).eq("empresa_id", empresa_id).execute()
-
-        dados_item = item.model_dump(mode='json')
-        dados_item.update({"os_id": os_id, "empresa_id": empresa_id})
-        inseridos.append(dados_item)
-
-    response = supabase.table("os_itens").insert(inseridos).execute()
+    baixados, inseridos = [], []
+    try:
+        for item in itens:
+            if item.estoque_id:
+                baixar_estoque(str(item.estoque_id), empresa_id, item.quantidade, f" para '{item.nome_item}'")
+                baixados.append(item)
+            dados_item = item.model_dump(mode='json')
+            dados_item.update({"os_id": os_id, "empresa_id": empresa_id})
+            inseridos.append(dados_item)
+        response = supabase.table("os_itens").insert(inseridos).execute()
+    except Exception:
+        # tudo ou nada: o que já saiu do estoque volta
+        for item in baixados:
+            devolver_estoque(str(item.estoque_id), empresa_id, item.quantidade)
+        raise
     recalcular_totais_os(os_id)
     return response.data
 
@@ -216,13 +215,10 @@ def atualizar_item(os_id: str, item_id: str, empresa_id: str, dados: OSItemUpdat
 
     if "quantidade" in campos and item_atual.get("estoque_id"):
         diff_qtd = campos["quantidade"] - item_atual["quantidade"]
-        if diff_qtd != 0:
-            est_res = supabase.table("estoque").select("quantidade").eq("id", item_atual["estoque_id"]).eq("empresa_id", empresa_id).execute().data
-            if est_res:
-                saldo_atual = est_res[0]["quantidade"]
-                if diff_qtd > 0 and saldo_atual < diff_qtd:
-                    raise HTTPException(status_code=400, detail=f"Estoque insuficiente. Saldo atual: {saldo_atual}")
-                supabase.table("estoque").update({"quantidade": saldo_atual - diff_qtd}).eq("id", item_atual["estoque_id"]).eq("empresa_id", empresa_id).execute()
+        if diff_qtd > 0:
+            baixar_estoque(item_atual["estoque_id"], empresa_id, diff_qtd)
+        elif diff_qtd < 0:
+            devolver_estoque(item_atual["estoque_id"], empresa_id, -diff_qtd)
 
     response = supabase.table("os_itens").update(campos).eq("id", item_id).eq("os_id", os_id).execute()
     recalcular_totais_os(os_id)
@@ -236,42 +232,20 @@ def remover_item(os_id: str, item_id: str, empresa_id: str):
     item = item_res[0]
 
     if item.get("estoque_id"):
-        est_res = supabase.table("estoque").select("quantidade").eq("id", item["estoque_id"]).eq("empresa_id", empresa_id).execute().data
-        if est_res:
-            supabase.table("estoque").update({"quantidade": est_res[0]["quantidade"] + item["quantidade"]}).eq("id", item["estoque_id"]).eq("empresa_id", empresa_id).execute()
+        devolver_estoque(item["estoque_id"], empresa_id, item["quantidade"])
 
     supabase.table("os_itens").delete().eq("id", item_id).eq("os_id", os_id).execute()
     recalcular_totais_os(os_id)
     return {"status": "sucesso", "detail": "Item removido e estornado (se aplicável)."}
 
 def deletar_os(os_id: str, empresa_id: str, motivo_exclusao: str):
-    os_res = supabase.table("ordens_servico").select("*").eq("id", os_id).eq("empresa_id", empresa_id).execute().data
-    if not os_res:
-        raise HTTPException(status_code=404, detail="Ordem de Serviço não encontrada.")
-    os_atual = os_res[0]
-
-    # Devolve as peças pro estoque e apaga os itens direto sem recalcular totais da OS que vai morrer (Achado #6)
-    itens = supabase.table("os_itens").select("id, estoque_id, quantidade").eq("os_id", os_id).execute().data
-    for item in itens:
-        if item.get("estoque_id"):
-            est_res = supabase.table("estoque").select("quantidade").eq("id", item["estoque_id"]).eq("empresa_id", empresa_id).execute().data
-            if est_res:
-                supabase.table("estoque").update({"quantidade": est_res[0]["quantidade"] + item["quantidade"]}).eq("id", item["estoque_id"]).eq("empresa_id", empresa_id).execute()
-
-    supabase.table("os_itens").delete().eq("os_id", os_id).execute()
-
-    # Armadilha #3: Mantém insert explícito na audit_logs com motivo_exclusao
-    os_atual["motivo_exclusao"] = motivo_exclusao
-    supabase.table("ordens_servico").delete().eq("id", os_id).eq("empresa_id", empresa_id).execute()
-    supabase.table("audit_logs").insert({
-        "tabela": "ordens_servico",
-        "operacao": "DELETE",
-        "registro_id": str(os_id),
-        "empresa_id": str(empresa_id),
-        "dados_antes": os_atual,
-        "dados_depois": None
-    }).execute()
-
+    # Estorno, delete dos itens, delete da OS e audit_logs numa transação só (migrations/003_rpc_estoque.sql)
+    try:
+        supabase.rpc("deletar_os_com_estorno", {"p_os": os_id, "p_empresa": empresa_id, "p_motivo": motivo_exclusao}).execute()
+    except APIError as e:
+        if "OS_NAO_ENCONTRADA" in (e.message or ""):
+            raise HTTPException(status_code=404, detail="Ordem de Serviço não encontrada.")
+        raise
     return {"status": "sucesso", "detail": "OS cancelada, estoque restaurado e log gerado."}
 
 def obter_dossie_impressao(os_id: str, empresa_id: str):

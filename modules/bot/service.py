@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from google import genai
 from google.genai import types
 from core.database import supabase
+from core.estoque_rpc import baixar_estoque
 from core.security import limpar_telefone
 
 from . import schemas
@@ -215,11 +216,12 @@ async def processar_e_injetar_audio(req: schemas.ProcessarAudioRequest):
             nome_lower = item["nome_item"].lower()
             match = next((e for e in estoque_empresa if e["nome"].lower() in nome_lower or nome_lower in e["nome"].lower()), None)
             if match:
-                estoque_id = match["id"]
-                custo_unitario = float(match.get("custo") or 0.0)
-                nova_qtd = max(0, match["quantidade"] - item["quantidade"])
-                supabase.table("estoque").update({"quantidade": nova_qtd}).eq("id", estoque_id).eq("empresa_id", req.empresa_id).execute()
-                match["quantidade"] = nova_qtd
+                try:
+                    baixar_estoque(match["id"], req.empresa_id, item["quantidade"])
+                    estoque_id = match["id"]
+                    custo_unitario = float(match.get("custo") or 0.0)
+                except HTTPException:
+                    pass  # sem saldo: a peça entra na OS sem vínculo, o estoque não é zerado em silêncio
 
         db_item = {
             "os_id": req.os_id,
