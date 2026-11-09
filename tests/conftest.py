@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from tests.homologacao import EMPRESAS, carregar_env_test, email_teste
+from tests.homologacao import DOMINIO_EMAIL, EMPRESAS, carregar_env_test, email_teste
 
 # Carrega .env.test antes de qualquer teste importar `main` (core.database lê o env no import).
 TEM_ENV_TEST = carregar_env_test()
@@ -164,7 +164,7 @@ def seed_ids(admin):
         os_ = admin.table("ordens_servico").select("id").eq("empresa_id", empresa_id).eq("veiculo_id", vei[0]["id"]).limit(1).execute().data
         est = admin.table("estoque").select("id").eq("empresa_id", empresa_id).eq("nome", "Filtro de óleo TESTE").execute().data
         ids[letra] = {"empresa": empresa_id, "cliente": cli[0]["id"], "veiculo": vei[0]["id"], "os": os_[0]["id"], "estoque": est[0]["id"]}
-        for u in admin.table("usuarios").select("id, cargo").eq("empresa_id", empresa_id).like("email", "%@autotec.test").execute().data:
+        for u in admin.table("usuarios").select("id, cargo").eq("empresa_id", empresa_id).like("email", f"%@{DOMINIO_EMAIL}").execute().data:
             ids[letra][u["cargo"]] = u["id"]
     return ids
 
