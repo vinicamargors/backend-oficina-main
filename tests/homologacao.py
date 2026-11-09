@@ -28,8 +28,11 @@ def carregar_env_test() -> bool:
     return True
 
 
+DOMINIO_EMAIL = "homolog-autotec.example.com"  # .test é recusado pelo EmailStr do backend
+
+
 def email_teste(cargo: str, letra: str) -> str:
-    return f"{cargo.lower()}.{letra}@autotec.test"
+    return f"{cargo.lower()}.{letra}@{DOMINIO_EMAIL}"
 
 
 def garantir_empresa_teste(client, empresa_id: str) -> None:
