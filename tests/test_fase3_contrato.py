@@ -288,3 +288,20 @@ def test_onboarding_de_conta_nova(api, token, seed_ids, admin):
             admin.table("audit_logs").delete().eq("empresa_id", emp).execute()
             admin.table("empresas").delete().eq("id", emp).execute()
         admin.auth.admin.delete_user(auth_id)
+
+
+@pytest.mark.cenario("F3-E1", "Equipe (nomes/cargos) para qualquer perfil, sem RH; RH continua só para o DONO; outra empresa → 403")
+@pytest.mark.parametrize("cargo", ["MECANICO", "ATENDENTE", "FINANCEIRO", "DONO"])
+def test_equipe_sem_rh_para_todos(api, token, seed_ids, cargo):
+    a, b = seed_ids["a"], seed_ids["b"]
+    r = api.get(f"/api/v1/usuarios/{a['empresa']}/equipe", headers=_h(token(cargo, "a")))
+    assert r.status_code == 200, r.text
+    equipe = r.json()
+    assert {"DONO", "MECANICO"} <= {u["cargo"] for u in equipe}
+    assert {u["empresa_id"] for u in equipe} == {a["empresa"]}
+    proibidos = {"salario_base", "comissao_servico_pct", "comissao_peca_pct", "vale_transporte", "vale_refeicao",
+                 "paga_hora_extra", "valor_hora_extra", "senha_hash"}
+    assert not any(proibidos & set(u) for u in equipe)
+    assert api.get(f"/api/v1/usuarios/{b['empresa']}/equipe", headers=_h(token(cargo, "a"))).status_code == 403
+    if cargo != "DONO":
+        assert api.get(f"/api/v1/usuarios/{a['empresa']}", headers=_h(token(cargo, "a"))).status_code == 403

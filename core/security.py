@@ -1,7 +1,9 @@
 import os
 import re
+import httpx
 from fastapi import HTTPException, Security, Header, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from supabase_auth.errors import AuthError
 from core.database import supabase
 
 seguranca_armada = HTTPBearer()
@@ -12,13 +14,21 @@ def limpar_telefone(tel: str) -> str:
 
 def validar_token(credentials: HTTPAuthorizationCredentials = Security(seguranca_armada)):
     """Valida o JWT no Supabase Auth e devolve o usuário do Auth (sem exigir perfil)."""
+    rejeitado = HTTPException(
+        status_code=401,
+        detail="Passaporte rejeitado pela matriz. Token inválido, expirado ou corrompido."
+    )
     try:
-        return supabase.auth.get_user(credentials.credentials).user
+        resposta = supabase.auth.get_user(credentials.credentials)
+    except AuthError:  # o Auth respondeu que o token não vale
+        raise rejeitado
+    except httpx.HTTPError:  # falha de conexão não é culpa do token: a tela repete a chamada
+        raise HTTPException(status_code=503, detail="Serviço de autenticação indisponível. Tente novamente.")
     except Exception:
-        raise HTTPException(
-            status_code=401,
-            detail="Passaporte rejeitado pela matriz. Token inválido, expirado ou corrompido."
-        )
+        raise rejeitado
+    if not resposta or not resposta.user:
+        raise rejeitado
+    return resposta.user
 
 def validar_passaporte(request: Request, auth_user=Depends(validar_token)):
     """
