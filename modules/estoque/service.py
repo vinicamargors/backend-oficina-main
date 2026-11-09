@@ -1,5 +1,6 @@
 from fastapi import HTTPException
 from core.database import supabase
+from core.estoque_rpc import baixar_estoque, devolver_estoque
 from .schemas import EstoqueCreate, EstoqueUpdate, EstoqueAjuste
 
 def listar_estoque(empresa_id: str, categoria: str = None):
@@ -59,10 +60,9 @@ def deletar_item(item_id: str, empresa_id: str):
     return {"status": "sucesso", "detail": "Item varrido do mapa logístico."}
 
 def ajustar_estoque(item_id: str, empresa_id: str, ajuste: EstoqueAjuste):
-    estado_anterior = obter_item(item_id, empresa_id)
-    qtd_atual = estado_anterior["quantidade"]
-
-    nova_qtd = qtd_atual + ajuste.quantidade if ajuste.tipo == "entrada" else max(0, qtd_atual - ajuste.quantidade)
-
-    response = supabase.table("estoque").update({"quantidade": nova_qtd}).eq("id", item_id).eq("empresa_id", empresa_id).execute()
-    return response.data[0]
+    obter_item(item_id, empresa_id)  # 404 se não for da empresa
+    if ajuste.tipo == "entrada":
+        devolver_estoque(item_id, empresa_id, ajuste.quantidade)
+    else:
+        baixar_estoque(item_id, empresa_id, ajuste.quantidade)
+    return obter_item(item_id, empresa_id)
