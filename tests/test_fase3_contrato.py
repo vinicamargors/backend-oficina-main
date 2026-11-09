@@ -229,3 +229,20 @@ def test_configuracoes_da_oficina(api, token, seed_ids, admin):
         restaura = {k: cfg_antes.get(k) for k in novo}
         admin.table("configuracoes_empresa").update(restaura).eq("empresa_id", emp).execute()
         admin.table("empresas").update(emp_antes).eq("id", emp).execute()
+
+
+@pytest.mark.cenario("F3-C3", "Lista de clientes vem ordenada por nome (a tela dependia disso)")
+def test_clientes_ordenados_por_nome(api, token, seed_ids, admin):
+    a = seed_ids["a"]
+    tok = token("ATENDENTE", "a")
+    temp = admin.table("clientes").insert([
+        {"empresa_id": a["empresa"], "nome": "ZZ F3-C3", "telefone": "11900000091"},
+        {"empresa_id": a["empresa"], "nome": "AA F3-C3", "telefone": "11900000092"},
+    ]).execute().data
+    try:
+        nomes = [c["nome"] for c in api.get(f"/api/v1/clientes/{a['empresa']}", headers=_h(tok)).json()]
+        # a ordem é a do banco (ignora maiúsculas): basta o "AA" vir antes do "ZZ" e antes dos demais
+        assert nomes.index("AA F3-C3") < nomes.index("ZZ F3-C3")
+        assert nomes.index("AA F3-C3") == 0 or nomes[0].lower() <= "aa f3-c3"
+    finally:
+        admin.table("clientes").delete().in_("id", [c["id"] for c in temp]).execute()
