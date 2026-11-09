@@ -1,5 +1,6 @@
 from fastapi import HTTPException
 from core.database import supabase
+from core.security import garantir_da_empresa
 from datetime import datetime, timezone, timedelta
 from typing import List
 from .schemas import OSCreate, OSUpdate, OSItemCreate, OSItemUpdate
@@ -104,6 +105,10 @@ def _sincronizar_km_veiculo(veiculo_id: str, empresa_id: str, km_novo: int):
         supabase.table("veiculos").update({"km_atual": km_novo}).eq("id", str(veiculo_id)).eq("empresa_id", str(empresa_id)).execute()
 
 def criar_os(dados: OSCreate):
+    empresa_id = str(dados.empresa_id)
+    garantir_da_empresa("clientes", dados.cliente_id, empresa_id, "Cliente")
+    garantir_da_empresa("veiculos", dados.veiculo_id, empresa_id, "Veículo")
+    garantir_da_empresa("usuarios", dados.mecanico_responsavel_id, empresa_id, "Mecânico")
     os_aberta = supabase.table("ordens_servico").select("id, data_abertura, status").eq("veiculo_id", str(dados.veiculo_id)).eq("status", "ORCAMENTO").eq("empresa_id", str(dados.empresa_id)).order("data_abertura", desc=True).execute()
     if os_aberta.data:
         orc_recente = os_aberta.data[0]
@@ -131,6 +136,7 @@ def atualizar_os(os_id: str, empresa_id: str, dados: OSUpdate):
     campos = dados.model_dump(exclude_unset=True, mode='json')
     if not campos:
         return os_atual
+    garantir_da_empresa("usuarios", campos.get("mecanico_responsavel_id"), empresa_id, "Mecânico")
 
     if campos.get("km_atual"):
         _sincronizar_km_veiculo(str(os_atual["veiculo_id"]), empresa_id, campos["km_atual"])
@@ -142,8 +148,7 @@ def atualizar_os(os_id: str, empresa_id: str, dados: OSUpdate):
     return response.data[0]
 
 def _garantir_os_da_empresa(os_id: str, empresa_id: str):
-    if not supabase.table("ordens_servico").select("id").eq("id", os_id).eq("empresa_id", empresa_id).execute().data:
-        raise HTTPException(status_code=404, detail="Ordem de Serviço não encontrada.")
+    garantir_da_empresa("ordens_servico", os_id, empresa_id, "Ordem de Serviço")
 
 def adicionar_item(os_id: str, empresa_id: str, item: OSItemCreate):
     _garantir_os_da_empresa(os_id, empresa_id)

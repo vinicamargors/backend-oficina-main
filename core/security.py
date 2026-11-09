@@ -48,6 +48,14 @@ def empresa_do_usuario(usuario: dict, empresa_informada) -> str:
         return str(empresa_informada)
     return str(usuario["empresa_id"])
 
+def garantir_da_empresa(tabela: str, registro_id, empresa_id: str, nome: str) -> None:
+    """404 se o registro (cliente, veículo, OS, usuário...) não pertence à empresa. None é ignorado."""
+    if registro_id is None:
+        return
+    achou = supabase.table(tabela).select("id").eq("id", str(registro_id)).eq("empresa_id", str(empresa_id)).execute().data
+    if not achou:
+        raise HTTPException(status_code=404, detail=f"{nome} não encontrado nesta empresa.")
+
 def exigir_cargos(*cargos_permitidos: str):
     def dependency(usuario: dict = Depends(validar_passaporte)):
         if usuario.get("cargo") not in cargos_permitidos:
