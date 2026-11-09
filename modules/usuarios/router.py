@@ -21,6 +21,10 @@ def _bloquear_promocao_master(logado: dict, cargo_novo):
 def get_me(usuario_logado: dict = Depends(validar_passaporte)):
     return usuario_logado
 
+@router.get("/{empresa_id}/equipe", response_model=List[schemas.UsuarioEquipeResponse])
+def get_equipe(empresa_id: UUID):
+    return service.listar_equipe(str(empresa_id))
+
 @router.get("/{empresa_id}", response_model=List[schemas.UsuarioResponse], dependencies=[Depends(exigir_cargos("DONO", "master"))])
 def get_usuarios(empresa_id: UUID):
     return service.listar_usuarios(str(empresa_id))

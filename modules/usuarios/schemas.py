@@ -38,6 +38,18 @@ class UsuarioUpdate(BaseModel):
     estrelas_media: Optional[float] = None
     total_avaliacoes: Optional[int] = None
 
+class UsuarioEquipeResponse(BaseModel):
+    """Nomes e cargos da equipe, para qualquer perfil da empresa. Sem salário/comissão/vales (RH)."""
+    id: UUID
+    nome: str
+    email: Optional[str] = None
+    telefone: Optional[str] = None
+    cargo: str
+    ativo: bool = True
+    empresa_id: Optional[UUID] = None
+    estrelas_media: Optional[float] = None
+    total_avaliacoes: Optional[int] = None
+
 class UsuarioResponse(UsuarioBase):
     id: UUID
     empresa_id: Optional[UUID] = None

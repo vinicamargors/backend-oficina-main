@@ -3,7 +3,7 @@ from .schemas import ClienteCreate, ClienteUpdate
 from fastapi import HTTPException
 
 def listar_clientes_por_empresa(empresa_id: str):
-    return supabase.table("clientes").select("*").eq("empresa_id", empresa_id).execute().data
+    return supabase.table("clientes").select("*").eq("empresa_id", empresa_id).order("nome").execute().data
 
 def obter_cliente_por_id(cliente_id: str, empresa_id: str):
     response = supabase.table("clientes").select("*").eq("id", cliente_id).eq("empresa_id", empresa_id).execute()

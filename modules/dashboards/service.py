@@ -33,15 +33,15 @@ def obter_dashboard_operacional(empresa_id: str):
         .execute()
         .data
     )
-    itens_criticos = [i for i in estoque_data if i["quantidade"] <= i.get("minimo_alerta", 5)]
+    itens_criticos = [i for i in estoque_data if i["quantidade"] <= (i.get("minimo_alerta") if i.get("minimo_alerta") is not None else 5)]
 
     ultimas_os = (
         supabase.table("ordens_servico")
-        .select("id, status, data_abertura, total_geral, clientes(nome, telefone), veiculos(placa, modelo)")
+        .select("id, status, data_abertura, total_geral, descricao_problema, clientes(nome, telefone), veiculos(placa, modelo)")
         .eq("empresa_id", empresa_id)
         .gte("data_abertura", limite_30_dias)
         .order("data_abertura", desc=True)
-        .limit(5)
+        .limit(6)
         .execute()
         .data
     )
@@ -51,5 +51,5 @@ def obter_dashboard_operacional(empresa_id: str):
         "estoque_critico_count": len(itens_criticos),
         "status_counts": status_counts,
         "ultimas_os": ultimas_os,
-        "itens_criticos": itens_criticos[:5]
+        "itens_criticos": itens_criticos[:6]
     }

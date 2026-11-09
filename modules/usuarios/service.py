@@ -6,6 +6,11 @@ from .schemas import UsuarioCreate, UsuarioUpdate
 def listar_usuarios(empresa_id: str):
     return supabase.table("usuarios").select("*").eq("empresa_id", empresa_id).order("nome").execute().data
 
+COLUNAS_EQUIPE = "id, nome, email, telefone, cargo, ativo, empresa_id, estrelas_media, total_avaliacoes"
+
+def listar_equipe(empresa_id: str):
+    return supabase.table("usuarios").select(COLUNAS_EQUIPE).eq("empresa_id", empresa_id).order("nome").execute().data
+
 def criar_usuario(dados: UsuarioCreate, empresa_id: str):
     try:
         user_auth = supabase_admin.auth.admin.create_user({

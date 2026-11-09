@@ -1,4 +1,8 @@
+import logging
+
+import httpx
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from postgrest.exceptions import APIError
 from core.errors import supabase_exception_handler
@@ -21,6 +25,12 @@ app = FastAPI(title="Oficina API", description="Monólito Modular focado em efic
 
 # Tradutor de erros do Supabase
 app.add_exception_handler(APIError, supabase_exception_handler)
+
+# Conexão com o Supabase caiu/expirou: 503 (a tela repete leituras), em vez de 500 sem cabeçalho CORS.
+async def _servico_indisponivel(request, exc):
+    logging.getLogger("uvicorn.error").warning("Falha de conexão com o Supabase em %s: %r", request.url.path, exc)
+    return JSONResponse(status_code=503, content={"detail": "Banco de dados temporariamente indisponível. Tente novamente."})
+app.add_exception_handler(httpx.TransportError, _servico_indisponivel)
 
 # 1. MIDDLEWARE DO CORS (Aduana de liberação do React)
 app.add_middleware(

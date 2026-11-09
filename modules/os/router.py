@@ -21,6 +21,8 @@ def listar_ordens_servico(
     valor_min: Optional[float] = Query(None, description="Valor mínimo da OS"),
     valor_max: Optional[float] = Query(None, description="Valor máximo da OS"),
     ordenacao: Optional[str] = Query("data_desc", description="data_desc, data_asc, valor_desc, valor_asc"),
+    cliente_id: Optional[UUID] = Query(None, description="Histórico de um cliente"),
+    veiculo_id: Optional[UUID] = Query(None, description="Histórico de um veículo"),
     skip: int = Query(0, description="Para paginação: quantos registros pular"),
     limit: int = Query(50, description="Limite de registros por tela")
 ):
@@ -38,7 +40,9 @@ def listar_ordens_servico(
         valor_max=valor_max,
         ordenacao=ordenacao or "data_desc",
         skip=skip, 
-        limit=limit
+        limit=limit,
+        cliente_id=str(cliente_id) if cliente_id else None,
+        veiculo_id=str(veiculo_id) if veiculo_id else None,
     )
 
 @router.put("/{empresa_id}/{os_id}")
