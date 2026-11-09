@@ -2,6 +2,7 @@ import os
 import httpx
 from fastapi import HTTPException
 from core.database import supabase
+from core.security import garantir_da_empresa
 from .schemas import VeiculoCreate, VeiculoUpdate
 
 http_client = httpx.AsyncClient(timeout=5.0)
@@ -39,6 +40,7 @@ def obter_veiculo_por_id(veiculo_id: str, empresa_id: str):
     return response.data[0]
 
 def criar_veiculo(dados: VeiculoCreate):
+    garantir_da_empresa("clientes", dados.cliente_id, str(dados.empresa_id), "Cliente")
     dados.placa = dados.placa.upper().strip()
     response = supabase.table("veiculos").insert(dados.model_dump(mode='json')).execute()
     return response.data[0]
@@ -50,6 +52,7 @@ def atualizar_veiculo(veiculo_id: str, empresa_id: str, dados: VeiculoUpdate):
     campos_alterados = dados.model_dump(exclude_unset=True, mode='json')
     if not campos_alterados:
         return obter_veiculo_por_id(veiculo_id, empresa_id)
+    garantir_da_empresa("clientes", campos_alterados.get("cliente_id"), empresa_id, "Cliente")
 
     response = supabase.table("veiculos").update(campos_alterados).eq("id", veiculo_id).eq("empresa_id", empresa_id).execute()
     if not response.data:

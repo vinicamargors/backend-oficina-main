@@ -155,6 +155,21 @@ def token():
 
 
 @pytest.fixture(scope="session")
+def seed_ids(admin):
+    """IDs do seed por empresa: seed_ids['a']['cliente'|'veiculo'|'os'|'MECANICO'|...]."""
+    ids = {}
+    for letra, empresa_id in EMPRESAS.items():
+        cli = admin.table("clientes").select("id").eq("empresa_id", empresa_id).eq("nome", f"Cliente Teste {letra.upper()}").execute().data
+        vei = admin.table("veiculos").select("id").eq("empresa_id", empresa_id).eq("placa", f"TST{letra.upper()}001").execute().data
+        os_ = admin.table("ordens_servico").select("id").eq("empresa_id", empresa_id).eq("veiculo_id", vei[0]["id"]).limit(1).execute().data
+        est = admin.table("estoque").select("id").eq("empresa_id", empresa_id).eq("nome", "Filtro de óleo TESTE").execute().data
+        ids[letra] = {"empresa": empresa_id, "cliente": cli[0]["id"], "veiculo": vei[0]["id"], "os": os_[0]["id"], "estoque": est[0]["id"]}
+        for u in admin.table("usuarios").select("id, cargo").eq("empresa_id", empresa_id).like("email", "%@autotec.test").execute().data:
+            ids[letra][u["cargo"]] = u["id"]
+    return ids
+
+
+@pytest.fixture(scope="session")
 def api():
     from fastapi.testclient import TestClient
     from main import app
