@@ -41,9 +41,12 @@ class OSDossieResponse(BaseModel):
 
 class OSListResponse(BaseModel):
     id: UUID
+    cliente_id: Optional[UUID] = None
+    veiculo_id: Optional[UUID] = None
+    km_atual: Optional[int] = None
     status: str
-    data_abertura: str
-    total_geral: float
+    data_abertura: Optional[str] = None
+    total_geral: Optional[float] = 0
     descricao_problema: Optional[str] = None
     clientes: Optional[Dict[str, Any]] = None
     veiculos: Optional[Dict[str, Any]] = None

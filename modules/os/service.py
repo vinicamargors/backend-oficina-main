@@ -16,16 +16,22 @@ def listar_os(
     valor_max: float = None,
     ordenacao: str = "data_desc",
     skip: int = 0,
-    limit: int = 50
+    limit: int = 50,
+    cliente_id: str = None,
+    veiculo_id: str = None,
 ):
     """O Radar do Pátio: Puxa as OS com paginação pesada e auditoria de volume total."""
     query = supabase.table("ordens_servico").select(
-        "id, status, data_abertura, total_geral, descricao_problema, clientes(nome, telefone), veiculos(placa, modelo)",
+        "id, cliente_id, veiculo_id, km_atual, status, data_abertura, total_geral, descricao_problema, clientes(nome, telefone), veiculos(placa, modelo)",
         count="exact"
     ).eq("empresa_id", empresa_id)
 
     if status:
         query = query.eq("status", status.upper())
+    if cliente_id:
+        query = query.eq("cliente_id", cliente_id)
+    if veiculo_id:
+        query = query.eq("veiculo_id", veiculo_id)
     if data_inicio:
         query = query.gte("data_abertura", f"{data_inicio}T00:00:00")
     if data_fim:
@@ -49,6 +55,7 @@ def listar_os(
         response = query.limit(5000).execute()
         todas_os = response.data
         termo = search.lower()
+        termo_alfanum = "".join(c for c in termo if c.isalnum())
         filtradas = []
 
         for os in todas_os:
@@ -57,10 +64,13 @@ def listar_os(
 
             cli_nome = str(clientes.get("nome", "")).lower()
             vei_placa = str(veiculos.get("placa", "")).lower()
+            vei_placa_limpa = "".join(c for c in vei_placa if c.isalnum())
+            vei_modelo = str(veiculos.get("modelo", "")).lower()
             os_id = str(os.get("id", "")).lower()
-            desc = str(os.get("descricao_problema", "")).lower()
+            desc = str(os.get("descricao_problema") or "").lower()
 
-            if termo in cli_nome or termo in vei_placa or termo in os_id or termo in desc:
+            if (termo in cli_nome or termo in vei_placa or termo in vei_modelo or termo in os_id or termo in desc
+                    or (len(termo_alfanum) >= 2 and termo_alfanum in vei_placa_limpa)):
                 filtradas.append(os)
 
         return {
@@ -193,7 +203,9 @@ def adicionar_itens_lote(os_id: str, empresa_id: str, itens: List[OSItemCreate])
     return response.data
 
 def atualizar_item(os_id: str, item_id: str, empresa_id: str, dados: OSItemUpdate):
-    item_res = supabase.table("os_itens").select("*").eq("id", item_id).eq("os_id", os_id).eq("empresa_id", empresa_id).execute().data
+    # O dono do item é a OS: itens antigos do legado não têm empresa_id preenchido.
+    _garantir_os_da_empresa(os_id, empresa_id)
+    item_res = supabase.table("os_itens").select("*").eq("id", item_id).eq("os_id", os_id).execute().data
     if not item_res:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
     item_atual = item_res[0]
@@ -217,8 +229,8 @@ def atualizar_item(os_id: str, item_id: str, empresa_id: str, dados: OSItemUpdat
     return response.data[0]
 
 def remover_item(os_id: str, item_id: str, empresa_id: str):
-
-    item_res = supabase.table("os_itens").select("*").eq("id", item_id).eq("os_id", os_id).eq("empresa_id", empresa_id).execute().data
+    _garantir_os_da_empresa(os_id, empresa_id)
+    item_res = supabase.table("os_itens").select("*").eq("id", item_id).eq("os_id", os_id).execute().data
     if not item_res:
         raise HTTPException(status_code=404, detail="Item não encontrado.")
     item = item_res[0]
