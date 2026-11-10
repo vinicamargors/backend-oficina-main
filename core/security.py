@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import httpx
@@ -6,6 +7,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from supabase_auth.errors import AuthError
 from core.database import supabase
 
+_log = logging.getLogger("uvicorn.error")
 seguranca_armada = HTTPBearer()
 
 def limpar_telefone(tel: str) -> str:
@@ -20,11 +22,17 @@ def validar_token(credentials: HTTPAuthorizationCredentials = Security(seguranca
     )
     try:
         resposta = supabase.auth.get_user(credentials.credentials)
-    except AuthError:  # o Auth respondeu que o token não vale
-        raise rejeitado
+    except AuthError as e:
+        # "Invalid API key" = a chave do SERVIDOR (SUPABASE_SERVICE_KEY) está errada, não o token do usuário.
+        # Se virasse 401, a tela deslogaria todo mundo sem ninguém saber o motivo.
+        if "api key" in str(e).lower():
+            _log.error("SUPABASE_SERVICE_KEY/SUPABASE_URL rejeitados pelo Supabase Auth (%s). Confira as variáveis do servidor.", e)
+            raise HTTPException(status_code=503, detail="Configuração do servidor inválida (chave do banco). Avise o suporte.")
+        raise rejeitado  # o Auth respondeu que o token não vale
     except httpx.HTTPError:  # falha de conexão não é culpa do token: a tela repete a chamada
         raise HTTPException(status_code=503, detail="Serviço de autenticação indisponível. Tente novamente.")
     except Exception:
+        _log.exception("Erro inesperado ao validar o token")  # antes virava 401 mudo
         raise rejeitado
     if not resposta or not resposta.user:
         raise rejeitado
