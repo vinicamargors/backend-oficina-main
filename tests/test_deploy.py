@@ -34,3 +34,23 @@ def test_cors_por_variavel(monkeypatch):
     finally:
         monkeypatch.undo()
         importlib.reload(main)
+
+
+@pytest.mark.cenario("F41-K", "Chave do Supabase do SERVIDOR inválida (config errada) → 503 e log claro, não 401 'token inválido' que desloga todo mundo")
+def test_chave_do_servidor_invalida_nao_vira_token_invalido(monkeypatch):
+    from types import SimpleNamespace
+    from supabase_auth.errors import AuthApiError
+    import core.security as security
+
+    def get_user(_):
+        raise AuthApiError("Invalid API key", 401, None)  # o que o Supabase responde a uma service_role errada
+
+    monkeypatch.setattr(security, "supabase", SimpleNamespace(auth=SimpleNamespace(get_user=get_user)))
+    r = TestClient(main.app).get("/api/v1/usuarios/me", headers={"Authorization": "Bearer qualquer"})
+    assert r.status_code == 503 and "servidor" in r.json()["detail"].lower()
+
+    def get_user_token_ruim(_):
+        raise AuthApiError("invalid JWT: unable to parse", 403, "bad_jwt")  # token do usuário inválido de verdade
+
+    monkeypatch.setattr(security, "supabase", SimpleNamespace(auth=SimpleNamespace(get_user=get_user_token_ruim)))
+    assert TestClient(main.app).get("/api/v1/usuarios/me", headers={"Authorization": "Bearer qualquer"}).status_code == 401
