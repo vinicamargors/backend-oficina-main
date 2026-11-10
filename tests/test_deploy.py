@@ -1,0 +1,36 @@
+"""Fase 4.1 — o que a imagem de produção precisa: /health sem banco e CORS fechado pela variável ALLOWED_ORIGINS."""
+import importlib
+import os
+
+import pytest
+from fastapi.testclient import TestClient
+
+import main
+
+ORIGEM = "https://app.mecanify.com.br"
+
+
+def _preflight(client, origem):
+    h = {"Origin": origem, "Access-Control-Request-Method": "GET"}
+    return client.options("/api/v1/health", headers=h).headers.get("access-control-allow-origin")
+
+
+@pytest.mark.cenario("F41-H", "GET /api/v1/health responde 200 sem token e sem tocar o banco")
+def test_health():
+    r = TestClient(main.app).get("/api/v1/health")
+    assert r.status_code == 200 and r.json() == {"status": "ok"}
+
+
+@pytest.mark.cenario("F41-C", "Com ALLOWED_ORIGINS só o domínio do app passa no CORS; sem a variável tudo passa (compatível com o Render)")
+def test_cors_por_variavel(monkeypatch):
+    try:
+        monkeypatch.setenv("ALLOWED_ORIGINS", ORIGEM)
+        fechado = TestClient(importlib.reload(main).app)
+        assert _preflight(fechado, ORIGEM) == ORIGEM
+        assert _preflight(fechado, "https://evil.example") is None
+        monkeypatch.delenv("ALLOWED_ORIGINS")
+        aberto = TestClient(importlib.reload(main).app)
+        assert _preflight(aberto, "https://qualquer.example") == "https://qualquer.example"
+    finally:
+        monkeypatch.undo()
+        importlib.reload(main)

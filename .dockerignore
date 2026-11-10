@@ -1,0 +1,11 @@
+.git
+.github
+.env*
+__pycache__
+.pytest_cache
+tests
+auditorias
+migrations
+deploy
+*.md
+*.sql
