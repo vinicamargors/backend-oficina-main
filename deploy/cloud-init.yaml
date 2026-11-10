@@ -1,0 +1,54 @@
+#cloud-config
+# user-data das VMs Ubuntu 24.04 ARM (VM.Standard.A1.Flex, 1 OCPU / 6 GB). Edite só o SECRET_OCID.
+# Depois do primeiro boot a VM se mantém sozinha (timer a cada 2 min). Sem passo manual dentro da VM.
+package_update: true
+package_upgrade: true
+packages: [ca-certificates, curl, git, python3-venv, unattended-upgrades]
+
+write_files:
+  - path: /etc/autotec/vm.conf
+    permissions: "0600"
+    content: |
+      SECRET_OCID="ocid1.vaultsecret.oc1.sa-saopaulo-1.EDITAR"      # segredo `autotec-env` no Vault
+      REPO_URL="github.com/vinicamargors/backend-oficina-main.git"
+      GIT_BRANCH="main"
+  - path: /etc/systemd/system/autotec-deploy.service
+    content: |
+      [Unit]
+      Description=AutoTec: atualizar segredos e containers
+      After=network-online.target docker.service
+      Wants=network-online.target
+      [Service]
+      Type=oneshot
+      ExecStart=/opt/autotec/deploy/atualizar.sh
+  - path: /etc/systemd/system/autotec-deploy.timer
+    content: |
+      [Unit]
+      Description=AutoTec: deploy por pull
+      [Timer]
+      OnBootSec=30s
+      OnUnitInactiveSec=2min
+      RandomizedDelaySec=60s
+      [Install]
+      WantedBy=timers.target
+  - path: /etc/docker/daemon.json
+    content: |
+      {"log-driver": "json-file", "log-opts": {"max-size": "10m", "max-file": "3"}}
+
+runcmd:
+  - install -d -m 0700 /etc/autotec
+  - curl -fsSL https://get.docker.com | sh
+  - python3 -m venv /opt/oci && /opt/oci/bin/pip install --quiet oci-cli
+  # O token do Git está no segredo; o 1º clone acontece dentro de atualizar.sh. Para o bootstrap do script,
+  # baixamos o repositório uma vez com a mesma lógica:
+  - |
+    . /etc/autotec/vm.conf
+    /opt/oci/bin/oci secrets secret-bundle get --secret-id "$SECRET_OCID" --auth instance_principal \
+      --query 'data."secret-bundle-content".content' --raw-output | base64 -d > /etc/autotec/api.env
+    chmod 600 /etc/autotec/api.env
+    . /etc/autotec/api.env
+    git clone --branch "$GIT_BRANCH" "https://x-access-token:${GIT_READ_TOKEN}@${REPO_URL}" /opt/autotec
+  - chmod +x /opt/autotec/deploy/atualizar.sh
+  - systemctl daemon-reload
+  - systemctl enable --now autotec-deploy.timer
+  - dpkg-reconfigure -f noninteractive unattended-upgrades

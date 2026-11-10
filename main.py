@@ -1,4 +1,5 @@
 import logging
+import os
 
 import httpx
 from fastapi import FastAPI
@@ -33,9 +34,12 @@ async def _servico_indisponivel(request, exc):
 app.add_exception_handler(httpx.TransportError, _servico_indisponivel)
 
 # 1. MIDDLEWARE DO CORS (Aduana de liberação do React)
+# ALLOWED_ORIGINS="https://app.mecanify.com.br" em produção (front e API na mesma origem); sem a variável, aceita tudo
+# como antes (Render/dev). Vazio ("") fecha o CORS de vez.
+_origens = os.getenv("ALLOWED_ORIGINS")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"] if _origens is None else [o.strip() for o in _origens.split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -56,6 +60,13 @@ app.include_router(financeiro_router.router, prefix="/api/v1/financeiro", tags=[
 app.include_router(transacoes_financeiras_router.router, prefix="/api/v1/transacoes-financeiras", tags=["Contas a Pagar e Receber"])
 app.include_router(equipe_router.router, prefix="/api/v1/equipe", tags=["Equipe, RH e Ponto"])
 app.include_router(bot_router.router, prefix="/api/v1/bot", tags=["Bot de Atendimento"])
+
+
+# Liveness do processo (monitor externo e healthcheck do Docker). Não toca o banco de propósito:
+# o Supabase fora do ar não deve fazer o orquestrador reiniciar a API em loop.
+@app.get("/api/v1/health")
+def health():
+    return {"status": "ok"}
 
 
 @app.get("/")

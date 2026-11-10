@@ -1,0 +1,54 @@
+# Roda em cada VM da Oracle (ver deploy/RUNBOOK.md). Nenhuma porta é publicada: a única entrada é o cloudflared,
+# que abre conexão de SAÍDA para a Cloudflare. Segredos vêm de /etc/autotec/api.env (escrito a partir do Vault).
+name: autotec
+
+x-log: &log
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+services:
+  api:
+    image: ghcr.io/vinicamargors/backend-oficina-main:${API_TAG:-main}
+    env_file: /etc/autotec/api.env
+    restart: unless-stopped
+    mem_limit: 1g
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging: *log
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  web:
+    image: ghcr.io/vinicamargors/frontend-oficina-main:${WEB_TAG:-main}
+    restart: unless-stopped
+    mem_limit: 256m
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]   # o binário do Caddy tem essa capability e não executa sem ela
+    security_opt: ["no-new-privileges:true"]
+    logging: *log
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  cloudflared:
+    image: cloudflare/cloudflared:2025.11.1
+    command: tunnel --no-autoupdate run
+    env_file: /etc/autotec/api.env   # só usa TUNNEL_TOKEN
+    restart: unless-stopped
+    mem_limit: 128m
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging: *log
+    depends_on:
+      web: { condition: service_healthy }
