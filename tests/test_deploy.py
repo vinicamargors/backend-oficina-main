@@ -54,3 +54,11 @@ def test_chave_do_servidor_invalida_nao_vira_token_invalido(monkeypatch):
 
     monkeypatch.setattr(security, "supabase", SimpleNamespace(auth=SimpleNamespace(get_user=get_user_token_ruim)))
     assert TestClient(main.app).get("/api/v1/usuarios/me", headers={"Authorization": "Bearer qualquer"}).status_code == 401
+
+
+@pytest.mark.cenario("F41-A", "deploy/cloud-init.yaml é ASCII puro: acento colado no console da Oracle vira byte Latin-1 e o cloud-init descarta o arquivo inteiro")
+def test_cloud_init_so_ascii():
+    from pathlib import Path
+    texto = (Path(main.__file__).parent / "deploy" / "cloud-init.yaml").read_bytes()
+    fora = [(i, b) for i, b in enumerate(texto) if b > 127]
+    assert not fora, f"{len(fora)} bytes fora do ASCII (primeiro na posição {fora[0][0]})"

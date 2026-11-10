@@ -1,6 +1,8 @@
 #cloud-config
-# user-data das VMs Ubuntu 24.04 ARM (VM.Standard.A1.Flex, 1 OCPU / 6 GB). Edite só o SECRET_OCID.
-# Depois do primeiro boot a VM se mantém sozinha (timer a cada 2 min). Sem passo manual dentro da VM.
+# user-data das VMs Ubuntu 24.04 ARM (VM.Standard.A1.Flex, 1 OCPU / 6 GB). Edite so o SECRET_OCID.
+# IMPORTANTE: este arquivo tem que ser ASCII puro. Um acento colado no console da Oracle vira byte Latin-1 e o
+# cloud-init descarta o arquivo inteiro (Failed loading yaml blob). tests/test_deploy.py guarda isso.
+# Depois do primeiro boot a VM se mantem sozinha (timer a cada 2 min). Sem passo manual dentro da VM.
 package_update: true
 package_upgrade: true
 packages: [ca-certificates, curl, git, python3-venv, unattended-upgrades]
@@ -39,8 +41,8 @@ runcmd:
   - install -d -m 0700 /etc/autotec
   - curl -fsSL https://get.docker.com | sh
   - python3 -m venv /opt/oci && /opt/oci/bin/pip install --quiet oci-cli
-  # O token do Git está no segredo; o 1º clone acontece dentro de atualizar.sh. Para o bootstrap do script,
-  # baixamos o repositório uma vez com a mesma lógica:
+  # O token do Git esta no segredo; o 1o clone acontece dentro de atualizar.sh. Para o bootstrap do script,
+  # baixamos o repositorio uma vez com a mesma logica:
   - |
     . /etc/autotec/vm.conf
     /opt/oci/bin/oci secrets secret-bundle get --secret-id "$SECRET_OCID" --auth instance_principal \
