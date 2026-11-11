@@ -54,3 +54,23 @@ def test_chave_do_servidor_invalida_nao_vira_token_invalido(monkeypatch):
 
     monkeypatch.setattr(security, "supabase", SimpleNamespace(auth=SimpleNamespace(get_user=get_user_token_ruim)))
     assert TestClient(main.app).get("/api/v1/usuarios/me", headers={"Authorization": "Bearer qualquer"}).status_code == 401
+
+
+@pytest.mark.cenario("F41-A", "deploy/cloud-init.yaml é ASCII puro: acento colado no console da Oracle vira byte Latin-1 e o cloud-init descarta o arquivo inteiro")
+def test_cloud_init_so_ascii():
+    from pathlib import Path
+    texto = (Path(main.__file__).parent / "deploy" / "cloud-init.yaml").read_bytes()
+    fora = [(i, b) for i, b in enumerate(texto) if b > 127]
+    assert not fora, f"{len(fora)} bytes fora do ASCII (primeiro na posição {fora[0][0]})"
+
+
+@pytest.mark.cenario("F41-G", "Sem GEMINI_API_KEY a API sobe (só a rota de áudio do bot fica 503); antes o processo inteiro morria no import")
+def test_api_sobe_sem_chave_do_gemini():
+    import subprocess
+    import sys
+    from pathlib import Path
+    env = {k: v for k, v in os.environ.items() if k != "GEMINI_API_KEY"}
+    env.update(SUPABASE_URL="http://localhost", SUPABASE_SERVICE_KEY="x", PYTHONIOENCODING="utf-8")
+    codigo = "import dotenv; dotenv.load_dotenv = lambda *a, **k: False; import main; from modules.bot import service; assert service.gemini_client is None"
+    r = subprocess.run([sys.executable, "-c", codigo], cwd=Path(main.__file__).parent, env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr[-400:]
