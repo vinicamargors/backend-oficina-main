@@ -15,16 +15,20 @@ mv "$tmp" /etc/autotec/api.env
 # shellcheck disable=SC1091
 set -a; source /etc/autotec/api.env; set +a
 
-# 2) compose e este script vêm do repositório (token só de leitura, restrito a este repo)
+# 2) compose e este script vêm do repositório. GIT_READ_TOKEN (só leitura) é opcional: repositório público dispensa.
+ORIGEM="https://${GIT_READ_TOKEN:+x-access-token:${GIT_READ_TOKEN}@}${REPO_URL}"
 if [ ! -d /opt/autotec/.git ]; then
-  git clone --branch "$GIT_BRANCH" "https://x-access-token:${GIT_READ_TOKEN}@${REPO_URL}" /opt/autotec
+  git clone --branch "$GIT_BRANCH" "$ORIGEM" /opt/autotec
 fi
-git -C /opt/autotec remote set-url origin "https://x-access-token:${GIT_READ_TOKEN}@${REPO_URL}"
+git -C /opt/autotec remote set-url origin "$ORIGEM"
 git -C /opt/autotec fetch --quiet origin "$GIT_BRANCH"
 git -C /opt/autotec reset --quiet --hard "origin/$GIT_BRANCH"
 
 # 3) e 4) imagens. API_TAG / WEB_TAG (no segredo) fixam uma versão para rollback; sem elas, segue a main.
-echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin >/dev/null
+# GHCR_READ_TOKEN também é opcional: imagens públicas no GHCR são baixadas sem login.
+if [ -n "${GHCR_READ_TOKEN:-}" ]; then
+  echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin >/dev/null
+fi
 cd /opt/autotec/deploy
 docker compose pull --quiet
 docker compose up -d --remove-orphans

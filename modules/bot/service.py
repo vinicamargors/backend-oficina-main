@@ -16,11 +16,9 @@ from modules.veiculos.service import consultar_placa_externa
 # ==========================================
 # 1. MOTORES DE INTELIGÊNCIA & HTTP
 # ==========================================
+# Sem GEMINI_API_KEY a API sobe normalmente; só a rota de áudio do bot responde 503 (antes a API inteira não subia).
 CHAVE_API = os.getenv("GEMINI_API_KEY")
-if not CHAVE_API:
-    raise RuntimeError("🚨 ALERTA VERMELHO: GEMINI_API_KEY não encontrada no .env!")
-
-gemini_client = genai.Client(api_key=CHAVE_API)
+gemini_client = genai.Client(api_key=CHAVE_API) if CHAVE_API else None
 http_client = httpx.AsyncClient(timeout=15.0)
 
 # ==========================================
@@ -194,6 +192,8 @@ async def processar_e_injetar_audio(req: schemas.ProcessarAudioRequest):
     3. PADRONIZAÇÃO: Use formato numérico float para os preços.
     """
 
+    if gemini_client is None:
+        raise HTTPException(status_code=503, detail="IA do bot não configurada neste servidor (GEMINI_API_KEY).")
     response = gemini_client.models.generate_content(
         model='gemini-3.1-flash-lite',
         contents=[audio_part, prompt],
