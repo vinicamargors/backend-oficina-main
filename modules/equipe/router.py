@@ -29,9 +29,9 @@ def delete_escala(empresa_id: UUID, escala_id: UUID):
 def get_pontos(empresa_id: UUID, data: Optional[str] = Query(None, description="YYYY-MM-DD")):
     return service.listar_pontos(str(empresa_id), data)
 
-@router.post("/pontos/{empresa_id}", response_model=schemas.PontoEletronicoResponse, dependencies=[Depends(validar_passaporte)])
-def post_ponto(empresa_id: UUID, ponto: schemas.PontoEletronicoCreate):
-    return service.registrar_ponto(str(empresa_id), ponto)
+@router.post("/pontos/{empresa_id}", response_model=schemas.PontoEletronicoResponse)
+def post_ponto(empresa_id: UUID, ponto: schemas.PontoEletronicoCreate, usuario: dict = Depends(validar_passaporte)):
+    return service.registrar_ponto(str(empresa_id), usuario, ponto)
 
 
 # ==========================================
@@ -41,9 +41,17 @@ def post_ponto(empresa_id: UUID, ponto: schemas.PontoEletronicoCreate):
 def get_avaliacoes(empresa_id: UUID):
     return service.listar_avaliacoes(str(empresa_id))
 
-# ROTA PÚBLICA: Cliente clica no link do WhatsApp e avalia o atendimento do mecânico
+@router.get("/avaliacoes/{empresa_id}/link/{os_id}", response_model=schemas.LinkAvaliacaoResponse, dependencies=[Depends(exigir_cargos("DONO", "FINANCEIRO", "ATENDENTE", "master"))])
+def get_link_avaliacao(empresa_id: UUID, os_id: UUID):
+    return service.gerar_link_avaliacao(str(empresa_id), str(os_id))
+
+# ROTAS PÚBLICAS (sem login): o cliente abre o link do WhatsApp. Tudo é derivado da OS que o token assinado aponta.
+@router.get("/avaliar/{token}", response_model=schemas.AvaliacaoPublicaInfo)
+def get_avaliacao_publica(token: str):
+    return service.obter_info_avaliacao(token)
+
 @router.post("/avaliar", response_model=schemas.AvaliacaoOSResponse)
-def post_avaliacao_publica(avaliacao: schemas.AvaliacaoOSCreate):
+def post_avaliacao_publica(avaliacao: schemas.AvaliacaoPublicaCreate):
     return service.registrar_avaliacao(avaliacao)
 
 

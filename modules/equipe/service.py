@@ -2,11 +2,15 @@ import math
 from datetime import datetime, date
 from typing import Optional
 from fastapi import HTTPException
+from postgrest.exceptions import APIError
+from core.avaliacao_token import gerar_token, ler_token
 from core.database import supabase
+from core.security import garantir_da_empresa
+from core.tempo import agora_br
 from .schemas import (
     EscalaFolgaCreate,
     PontoEletronicoCreate,
-    AvaliacaoOSCreate,
+    AvaliacaoPublicaCreate,
     LancarFolhaInput,
     LancarFolhaResponse,
 )
@@ -76,10 +80,12 @@ def listar_pontos(empresa_id: str, data_filtro: Optional[str] = None):
         itens.append(row)
     return itens
 
-def registrar_ponto(empresa_id: str, dados: PontoEletronicoCreate):
-    agora = datetime.now()
-    data_registro = dados.data or agora.date()
-    hora_registro = dados.hora or agora.strftime("%H:%M:%S")
+def registrar_ponto(empresa_id: str, usuario: dict, dados: PontoEletronicoCreate):
+    # Usuário = quem está logado; data e hora = relógio do servidor em Brasília. Nada disso é aceito do cliente.
+    agora = agora_br()
+    data_registro = agora.date()
+    hora_registro = agora.strftime("%H:%M:%S")
+    usuario_id = str(usuario["id"])
 
     # Verifica configuração de GPS da oficina
     cfg_res = supabase.table("configuracoes_empresa").select(
@@ -105,7 +111,7 @@ def registrar_ponto(empresa_id: str, dados: PontoEletronicoCreate):
 
     payload = {
         "empresa_id": empresa_id,
-        "usuario_id": str(dados.usuario_id),
+        "usuario_id": usuario_id,
         "tipo": dados.tipo,
         "data": str(data_registro),
         "hora": hora_registro,
@@ -120,8 +126,7 @@ def registrar_ponto(empresa_id: str, dados: PontoEletronicoCreate):
         raise HTTPException(status_code=400, detail="Erro ao registrar ponto eletrônico.")
 
     registro = res.data[0]
-    usr = supabase.table("usuarios").select("nome").eq("id", str(dados.usuario_id)).execute().data
-    registro["usuario_nome"] = usr[0]["nome"] if usr else None
+    registro["usuario_nome"] = usuario.get("nome")
     return registro
 
 
@@ -140,31 +145,78 @@ def listar_avaliacoes(empresa_id: str):
         itens.append(row)
     return itens
 
-def registrar_avaliacao(dados: AvaliacaoOSCreate):
-    payload = dados.model_dump(mode="json")
-    res = supabase.table("avaliacoes_os").insert(payload).execute()
+STATUS_AVALIAVEL = ("FINALIZADO", "PAGO")
+
+
+def gerar_link_avaliacao(empresa_id: str, os_id: str):
+    """Link que o atendente manda ao cliente. Só para OS da empresa já finalizada ou paga."""
+    garantir_da_empresa("ordens_servico", os_id, empresa_id, "OS")
+    status = supabase.table("ordens_servico").select("status").eq("id", os_id).execute().data[0]["status"]
+    if status not in STATUS_AVALIAVEL:
+        raise HTTPException(status_code=400, detail="A avaliação só fica disponível depois que a OS é finalizada.")
+    token = gerar_token(os_id)
+    return {"token": token, "caminho": f"/?modo=avaliar&token={token}"}
+
+
+def _os_do_token(token: str) -> dict:
+    """Resolve o token na OS (com cliente e veículo). Token ruim e OS inexistente dão o mesmo 404."""
+    nao_achou = HTTPException(status_code=404, detail="Link de avaliação inválido ou expirado.")
+    os_id = ler_token(token)
+    if not os_id:
+        raise nao_achou
+    achou = supabase.table("ordens_servico").select(
+        "id, empresa_id, mecanico_responsavel_id, clientes(nome), veiculos(modelo, placa)"
+    ).eq("id", os_id).execute().data
+    if not achou:
+        raise nao_achou
+    return achou[0]
+
+
+def _ja_avaliada(os_id: str) -> bool:
+    return bool(supabase.table("avaliacoes_os").select("id").eq("os_id", os_id).execute().data)
+
+
+def obter_info_avaliacao(token: str):
+    os_row = _os_do_token(token)
+    veiculo = os_row.get("veiculos") or {}
+    return {
+        "veiculo_modelo": veiculo.get("modelo") or "",
+        "veiculo_placa": veiculo.get("placa") or "",
+        "ja_avaliada": _ja_avaliada(os_row["id"]),
+    }
+
+
+def registrar_avaliacao(dados: AvaliacaoPublicaCreate):
+    os_row = _os_do_token(dados.token)
+    ja_avaliada = HTTPException(status_code=409, detail="Esta OS já foi avaliada. Obrigado!")
+    if _ja_avaliada(os_row["id"]):
+        raise ja_avaliada
+
+    cliente = os_row.get("clientes") or {}
+    veiculo = os_row.get("veiculos") or {}
+    payload = {
+        "empresa_id": os_row["empresa_id"],
+        "os_id": os_row["id"],
+        "mecanico_id": os_row.get("mecanico_responsavel_id"),
+        "cliente_nome": cliente.get("nome") or "Cliente",
+        "veiculo_modelo": veiculo.get("modelo") or "",
+        "veiculo_placa": veiculo.get("placa") or "",
+        "nota": dados.nota,
+        "comentario": (dados.comentario or "").strip() or None,
+    }
+    try:
+        res = supabase.table("avaliacoes_os").insert(payload).execute()
+    except APIError as e:
+        if e.code == "23505":  # duas avaliações ao mesmo tempo: o índice único deixa passar só uma
+            raise ja_avaliada
+        raise
     if not res.data:
         raise HTTPException(status_code=400, detail="Erro ao salvar avaliação do cliente.")
 
     registro = res.data[0]
-
-    # Recalcula estrelas médias e total de avaliações do mecânico responsável
-    if dados.mecanico_id:
-        mecanico_str = str(dados.mecanico_id)
-        avs = supabase.table("avaliacoes_os").select("nota").eq("mecanico_id", mecanico_str).execute().data
-        if avs:
-            soma = sum(int(a["nota"]) for a in avs)
-            total = len(avs)
-            media = round(soma / total, 1)
-
-            supabase.table("usuarios").update({
-                "estrelas_media": media,
-                "total_avaliacoes": total
-            }).eq("id", mecanico_str).execute()
-
-        usr = supabase.table("usuarios").select("nome").eq("id", mecanico_str).execute().data
+    if registro.get("mecanico_id"):  # estrelas_media/total_avaliacoes do mecânico: trigger do banco
+        usr = supabase.table("usuarios").select("nome").eq("id", registro["mecanico_id"]).execute().data
         registro["mecanico_nome"] = usr[0]["nome"] if usr else None
-
     return registro
 
 

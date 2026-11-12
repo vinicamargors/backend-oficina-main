@@ -200,10 +200,10 @@ def test_escalas_e_ponto(api, token, seed_ids, admin):
     try:
         assert esc.json()["usuario_nome"]
         assert any(e["id"] == esc.json()["id"] for e in api.get(f"/api/v1/equipe/escalas/{emp}", headers=_h(mec)).json())
-        p = api.post(f"/api/v1/equipe/pontos/{emp}", headers=_h(mec), json={"empresa_id": emp, "usuario_id": a["MECANICO"], "usuario_nome": "Mecanico Teste A", "data": "2026-11-09", "hora": "08:00", "tipo": "ENTRADA", "latitude": -23.5, "longitude": -46.6, "dentro_raio": True, "distancia_metros": 0})
+        p = api.post(f"/api/v1/equipe/pontos/{emp}", headers=_h(mec), json={"tipo": "ENTRADA", "latitude": -23.5, "longitude": -46.6})  # fase 5: usuário, data e hora vêm do servidor
         assert p.status_code == 200, p.text
         ponto_id = p.json()["id"]
-        assert any(x["id"] == ponto_id for x in api.get(f"/api/v1/equipe/pontos/{emp}?data=2026-11-09", headers=_h(dono)).json())
+        assert any(x["id"] == ponto_id for x in api.get(f"/api/v1/equipe/pontos/{emp}?data={p.json()['data']}", headers=_h(dono)).json())
     finally:
         api.delete(f"/api/v1/equipe/escalas/{emp}/{esc.json()['id']}", headers=_h(dono))
         if ponto_id:
