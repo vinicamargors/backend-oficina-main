@@ -1,9 +1,10 @@
 from collections import defaultdict
 from core.database import supabase
 from datetime import datetime
+from core.tempo import agora_br, para_br
 
 def obter_dados_financeiros(empresa_id: str, data_inicial: str = None, data_final: str = None):
-    hoje = datetime.now()
+    hoje = agora_br().replace(tzinfo=None)
 
     os_data = supabase.table("ordens_servico").select(
         "status, total_geral, lucro_estimado, data_abertura, data_fechamento"
@@ -28,7 +29,7 @@ def obter_dados_financeiros(empresa_id: str, data_inicial: str = None, data_fina
         if not raw_date:
             continue
 
-        dt_os = datetime.fromisoformat(raw_date.replace("Z", "+00:00")[:19])
+        dt_os = para_br(raw_date)
         is_pago_real = (status == "PAGO") or (status == "FINALIZADO" and (hoje - dt_os).days >= 30)
 
         if is_pago_real:
@@ -101,7 +102,7 @@ def obter_inteligencia_financeira(empresa_id: str, data_inicial: str = None, dat
         if not raw_date:
             continue
             
-        dt_os = datetime.fromisoformat(raw_date.replace("Z", "+00:00")[:19])
+        dt_os = para_br(raw_date)
 
         if dt_ini and dt_fim:
             if not (dt_ini <= dt_os <= dt_fim):
@@ -161,8 +162,8 @@ def obter_inteligencia_financeira(empresa_id: str, data_inicial: str = None, dat
         dt_fechamento = os.get("data_fechamento")
         if dt_abertura and dt_fechamento:
             try:
-                t1 = datetime.fromisoformat(dt_abertura.replace("Z", "+00:00")[:19])
-                t2 = datetime.fromisoformat(dt_fechamento.replace("Z", "+00:00")[:19])
+                t1 = para_br(dt_abertura)
+                t2 = para_br(dt_fechamento)
                 horas = (t2 - t1).total_seconds() / 3600.0
                 if horas >= 0:
                     lead_times_horas.append(horas)
