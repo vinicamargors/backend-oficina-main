@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from fastapi import HTTPException
 from core.database import supabase
+from core.tempo import agora_br
 from .schemas import TransacaoCreate, TransacaoUpdate, TransacaoLiquidar
 
 def listar_transacoes(
@@ -29,7 +30,7 @@ def listar_transacoes(
     res = query.execute()
     transacoes = res.data or []
 
-    hoje = date.today().isoformat()
+    hoje = agora_br().date().isoformat()
     total_despesas_pagas = 0.0
     total_despesas_pendentes = 0.0
     total_receitas_recebidas = 0.0
@@ -107,11 +108,11 @@ def atualizar_transacao(item_id: str, empresa_id: str, dados: TransacaoUpdate):
 
 def liquidar_transacao(item_id: str, empresa_id: str, dados: TransacaoLiquidar):
     obter_transacao(item_id, empresa_id)
-    dt_liq = (dados.data_liquidacao or date.today()).isoformat()
+    dt_liq = (dados.data_liquidacao or agora_br().date()).isoformat()
     campos = {
         "status": "LIQUIDADO",
         "data_liquidacao": dt_liq,
-        "updated_at": datetime.now().isoformat(),
+        "updated_at": agora_br().isoformat(),
     }
     if dados.forma_pagamento:
         campos["forma_pagamento"] = dados.forma_pagamento
