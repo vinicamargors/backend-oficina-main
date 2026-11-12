@@ -27,10 +27,8 @@ class EscalaFolgaResponse(EscalaFolgaBase):
 TipoPonto = Literal['ENTRADA', 'ALMOCO_SAIDA', 'ALMOCO_RETORNO', 'SAIDA']
 
 class PontoEletronicoCreate(BaseModel):
-    usuario_id: UUID
+    # Quem bate o ponto é o usuário do token e data/hora são do servidor: nada disso vem do cliente.
     tipo: TipoPonto
-    data: Optional[date] = None
-    hora: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
@@ -50,19 +48,32 @@ class PontoEletronicoResponse(BaseModel):
 
 
 # Avaliação Pública OS (NPS & 5 Estrelas)
-class AvaliacaoOSCreate(BaseModel):
+class AvaliacaoPublicaCreate(BaseModel):
+    """O cliente manda só o token e a opinião; empresa, mecânico, cliente e placa vêm da OS."""
+    token: str
+    nota: int = Field(..., ge=1, le=5)
+    comentario: Optional[str] = Field(None, max_length=1000)
+
+class AvaliacaoPublicaInfo(BaseModel):
+    veiculo_modelo: str
+    veiculo_placa: str
+    ja_avaliada: bool
+
+class LinkAvaliacaoResponse(BaseModel):
+    token: str
+    caminho: str  # relativo à origem do app: "/?modo=avaliar&token=..."
+
+class AvaliacaoOSResponse(BaseModel):
+    id: UUID
     empresa_id: UUID
     os_id: UUID
     mecanico_id: Optional[UUID] = None
+    mecanico_nome: Optional[str] = None
     cliente_nome: str
     veiculo_modelo: str
     veiculo_placa: str
-    nota: int = Field(..., ge=1, le=5)
+    nota: int
     comentario: Optional[str] = None
-
-class AvaliacaoOSResponse(AvaliacaoOSCreate):
-    id: UUID
-    mecanico_nome: Optional[str] = None
     data: Optional[date] = None
     created_at: Optional[datetime] = None
 
