@@ -10,6 +10,19 @@ router = APIRouter(dependencies=[Depends(validar_passaporte)])
 def get_estoque(empresa_id: UUID, categoria: Optional[str] = None):
     return service.listar_estoque(str(empresa_id), categoria)
 
+# Antes de /{empresa_id}/{item_id}, senão "categorias" seria lido como id do item
+@router.get("/{empresa_id}/categorias", response_model=list[str])
+def get_categorias(empresa_id: UUID):
+    return service.listar_categorias(str(empresa_id))
+
+@router.post("/{empresa_id}/categorias", response_model=schemas.CategoriaResponse)
+def post_categoria(empresa_id: UUID, dados: schemas.CategoriaCreate):
+    return service.criar_categoria(str(empresa_id), dados.nome)
+
+@router.delete("/{empresa_id}/categorias/{nome}")
+def delete_categoria(empresa_id: UUID, nome: str):
+    return service.excluir_categoria(str(empresa_id), nome)
+
 @router.get("/{empresa_id}/{item_id}", response_model=schemas.EstoqueResponse)
 def get_item_estoque(empresa_id: UUID, item_id: UUID):
     return service.obter_item(str(item_id), str(empresa_id))

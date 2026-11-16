@@ -1,6 +1,15 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Literal
 from uuid import UUID
+
+
+def normalizar_categoria(valor: str) -> str:
+    """Categoria é texto livre da oficina: sem espaços nas pontas, MAIÚSCULAS, 1–40 caracteres (o banco confere de novo)."""
+    nome = " ".join(str(valor).split()).upper()
+    if not 1 <= len(nome) <= 40:
+        raise ValueError("A categoria precisa ter de 1 a 40 caracteres.")
+    return nome
+
 
 class EstoqueBase(BaseModel):
     nome: str
@@ -11,6 +20,8 @@ class EstoqueBase(BaseModel):
     minimo_alerta: int = Field(default=5, ge=0)
     codigo: Optional[str] = None
     empresa_id: UUID
+
+    _categoria = field_validator("categoria")(normalizar_categoria)
 
 class EstoqueCreate(EstoqueBase):
     pass
@@ -24,6 +35,11 @@ class EstoqueUpdate(BaseModel):
     minimo_alerta: Optional[int] = Field(None, ge=0)
     codigo: Optional[str] = None
 
+    @field_validator("categoria")
+    @classmethod
+    def _categoria(cls, v):
+        return v if v is None else normalizar_categoria(v)
+
 class EstoqueAjuste(BaseModel):
     tipo: Literal['entrada', 'saida']
     quantidade: int = Field(..., gt=0) # Tem que ser maior que zero
@@ -36,6 +52,14 @@ class EstoqueStats(BaseModel):
     estoque_baixo: int
     valor_total_custo: float
     valor_total_venda: float # Bônus de visão de negócio: quanto esse estoque vale no preço final
+
+class CategoriaCreate(BaseModel):
+    nome: str
+
+    _nome = field_validator("nome")(normalizar_categoria)
+
+class CategoriaResponse(BaseModel):
+    nome: str
 
 class EstoqueListResponse(BaseModel):
     itens: list[EstoqueResponse]
