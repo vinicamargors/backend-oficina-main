@@ -1,24 +1,60 @@
 from collections import defaultdict
 from core.database import supabase
-from datetime import datetime
-from core.tempo import agora_br, para_br
+from datetime import datetime, timedelta, timezone
+from core.consulta import todas
+from core.tempo import FUSO_BR, agora_br, para_br
+
+
+def _utc(naive_br: datetime) -> str:
+    return naive_br.replace(tzinfo=FUSO_BR).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _no_periodo(query, ini: datetime = None, fim: datetime = None):
+    """Período no banco. A data da OS é data_fechamento ou, se vazia, data_abertura; ini/fim são relógio de Brasília."""
+    if ini is None and fim is None:
+        return query
+    def faixa(col):
+        p = ([f"{col}.gte.{_utc(ini)}"] if ini else []) + ([f"{col}.lte.{_utc(fim)}"] if fim else [])
+        return ",".join(p)
+    return query.or_(f"and({faixa('data_fechamento')}),and(data_fechamento.is.null,{faixa('data_abertura')})")
 
 def obter_dados_financeiros(empresa_id: str, data_inicial: str = None, data_final: str = None):
     hoje = agora_br().replace(tzinfo=None)
 
-    os_data = supabase.table("ordens_servico").select(
-        "status, total_geral, lucro_estimado, data_abertura, data_fechamento"
-    ).eq("empresa_id", empresa_id).execute().data
+    dt_ini = datetime.fromisoformat(f"{data_inicial}T00:00:00") if data_inicial else None
+    dt_fim = datetime.fromisoformat(f"{data_final}T23:59:59") if data_final else None
+    periodo = (dt_ini, dt_fim) if (dt_ini and dt_fim) else (None, None)  # como antes: só filtra com as duas datas
+
+    def buscar(ini, fim, status=None):
+        q = supabase.table("ordens_servico").select(
+            "status, total_geral, lucro_estimado, data_abertura, data_fechamento"
+        ).eq("empresa_id", empresa_id).order("id")
+        if status:
+            q = q.in_("status", status)
+        return todas(_no_periodo(q, ini, fim))
+
+    os_data = buscar(*periodo)
+    # O gráfico dos 6 meses ignora o filtro de período: busca só PAGO/FINALIZADO dos últimos 6 meses.
+    mes_ini = hoje.replace(day=1)
+    for _ in range(5):
+        mes_ini = (mes_ini - timedelta(days=1)).replace(day=1)
+    os_hist = os_data if periodo == (None, None) else buscar(mes_ini, None, ["PAGO", "FINALIZADO"])
 
     faturamento_pago = 0.0
     faturamento_projetado = 0.0
     lucro_realizado = 0.0
     total_os_concluidas = 0
 
-    dt_ini = datetime.fromisoformat(f"{data_inicial}T00:00:00") if data_inicial else None
-    dt_fim = datetime.fromisoformat(f"{data_final}T23:59:59") if data_final else None
-
     hist_map = defaultdict(lambda: [0.0, 0.0])
+
+    for os in os_hist:  # histórico: independe do período
+        raw_date = os.get("data_fechamento") or os.get("data_abertura")
+        if not raw_date:
+            continue
+        dt_os = para_br(raw_date)
+        if (os.get("status") == "PAGO") or (os.get("status") == "FINALIZADO" and (hoje - dt_os).days >= 30):
+            hist_map[f"{dt_os.month:02d}/{dt_os.year}"][0] += float(os.get("total_geral") or 0.0)
+            hist_map[f"{dt_os.month:02d}/{dt_os.year}"][1] += float(os.get("lucro_estimado") or 0.0)
 
     for os in os_data:
         status = os.get("status")
@@ -31,14 +67,6 @@ def obter_dados_financeiros(empresa_id: str, data_inicial: str = None, data_fina
 
         dt_os = para_br(raw_date)
         is_pago_real = (status == "PAGO") or (status == "FINALIZADO" and (hoje - dt_os).days >= 30)
-
-        if is_pago_real:
-            chave_mes = f"{dt_os.month:02d}/{dt_os.year}"
-            hist_map[chave_mes][0] += total
-            hist_map[chave_mes][1] += lucro
-
-        if dt_ini and dt_fim and not (dt_ini <= dt_os <= dt_fim):
-            continue
 
         if is_pago_real:
             faturamento_pago += total
@@ -76,15 +104,15 @@ def obter_dados_financeiros(empresa_id: str, data_inicial: str = None, data_fina
 
 def obter_inteligencia_financeira(empresa_id: str, data_inicial: str = None, data_final: str = None):
     # A inteligência estratégica já consolida FINALIZADO e PAGO porque foca na PRODUÇÃO de valor
-    os_list = supabase.table("ordens_servico").select(
+    dt_ini = datetime.fromisoformat(f"{data_inicial}T00:00:00") if data_inicial else None
+    dt_fim = datetime.fromisoformat(f"{data_final}T23:59:59") if data_final else None
+    q = supabase.table("ordens_servico").select(
         "id, status, total_geral, total_pecas, total_mao_obra, lucro_estimado, data_abertura, data_fechamento, forma_pagamento",
         "clientes(id, nome)",
         "veiculos(id, placa, marca, modelo, ano)",
         "usuarios(id, nome)"
-    ).eq("empresa_id", empresa_id).execute().data
-
-    dt_ini = datetime.fromisoformat(f"{data_inicial}T00:00:00") if data_inicial else None
-    dt_fim = datetime.fromisoformat(f"{data_final}T23:59:59") if data_final else None
+    ).eq("empresa_id", empresa_id).order("id")
+    os_list = todas(_no_periodo(q, *((dt_ini, dt_fim) if (dt_ini and dt_fim) else (None, None))))
 
     clientes_aggr = {}
     mecanicos_aggr = {}
@@ -103,10 +131,6 @@ def obter_inteligencia_financeira(empresa_id: str, data_inicial: str = None, dat
             continue
             
         dt_os = para_br(raw_date)
-
-        if dt_ini and dt_fim:
-            if not (dt_ini <= dt_os <= dt_fim):
-                continue
 
         status = os.get("status")
         
