@@ -193,6 +193,7 @@ def test_processar_audio(monkeypatch):
     monkeypatch.setattr(bot, "gemini_client", SimpleNamespace(aio=SimpleNamespace(models=SimpleNamespace(generate_content=gerar))))
     monkeypatch.setattr(bot, "baixar_estoque", lambda i, e, q: baixas.append((i, q)))
     monkeypatch.setattr(bot, "recalcular_totais_os", lambda _: None)
+    monkeypatch.setattr(bot, "garantir_da_empresa", lambda *a, **k: None)  # T-010: a OS é da empresa (o isolamento tem teste próprio)
 
     ruim = ProcessarAudioRequest(empresa_id=E, os_id="os1", url_audio="https://evil.com/a.ogg")
     with pytest.raises(HTTPException) as e:
