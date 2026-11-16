@@ -4,10 +4,10 @@ from uuid import UUID
 
 
 def normalizar_categoria(valor: str) -> str:
-    """Categoria é texto livre da oficina: sem espaços nas pontas, MAIÚSCULAS, 1–40 caracteres (o banco confere de novo)."""
+    """Categoria é texto livre da oficina: sem espaços nas pontas, MAIÚSCULAS, 1–30 caracteres (limite da coluna estoque.categoria)."""
     nome = " ".join(str(valor).split()).upper()
-    if not 1 <= len(nome) <= 40:
-        raise ValueError("A categoria precisa ter de 1 a 40 caracteres.")
+    if not 1 <= len(nome) <= 30:
+        raise ValueError("A categoria precisa ter de 1 a 30 caracteres.")
     return nome
 
 

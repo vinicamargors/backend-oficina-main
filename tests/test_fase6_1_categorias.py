@@ -43,11 +43,11 @@ def test_item_com_categoria_nova(api, token, seed_ids, admin):
         _limpar(admin, a["empresa"], criados)
 
 
-@pytest.mark.cenario("F61-2", "Categoria vazia ou com mais de 40 caracteres → 422 e nada gravado")
+@pytest.mark.cenario("F61-2", "Categoria vazia ou com mais de 30 caracteres (limite da coluna) → 422 e nada gravado")
 def test_categoria_invalida(api, token, seed_ids, admin):
     a, tok = seed_ids["a"], token("DONO", "a")
     antes = len(admin.table("estoque").select("id").eq("empresa_id", a["empresa"]).execute().data)
-    for ruim in ("", "   ", "X" * 41):
+    for ruim in ("", "   ", "X" * 31):
         assert api.post("/api/v1/estoque/", headers=_h(tok), json=_item(a["empresa"], ruim)).status_code == 422, ruim
         assert api.put(f"/api/v1/estoque/{a['empresa']}/{a['estoque']}", headers=_h(tok), json={"categoria": ruim}).status_code == 422, ruim
         assert api.post(f"/api/v1/estoque/{a['empresa']}/categorias", headers=_h(tok), json={"nome": ruim}).status_code == 422, ruim
