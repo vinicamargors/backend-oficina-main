@@ -45,6 +45,7 @@ def listar_escalas(empresa_id: str):
     return itens
 
 def criar_escala(empresa_id: str, dados: EscalaFolgaCreate):
+    garantir_da_empresa("usuarios", dados.usuario_id, empresa_id, "Colaborador")
     payload = dados.model_dump(mode="json")
     payload["empresa_id"] = empresa_id
 

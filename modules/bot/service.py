@@ -6,7 +6,7 @@ from google import genai
 from google.genai import types
 from core.database import supabase
 from core.estoque_rpc import baixar_estoque
-from core.security import limpar_telefone
+from core.security import garantir_da_empresa, limpar_telefone
 
 from . import schemas
 from modules.os.schemas import OSUpdate
@@ -107,6 +107,9 @@ def buscar_os_ativa_por_placa_cliente(empresa_id: str, termo_busca: str):
 # 4. ABERTURA DE ORDEM DE SERVIÇO
 # ==========================================
 def abrir_os(req: schemas.CriarOSRequest):
+    garantir_da_empresa("clientes", req.cliente_id, req.empresa_id, "Cliente")
+    garantir_da_empresa("veiculos", req.veiculo_id, req.empresa_id, "Veículo")
+    garantir_da_empresa("usuarios", req.mecanico_id, req.empresa_id, "Mecânico")
     os_aberta = supabase.table("ordens_servico").select("id").eq("veiculo_id", req.veiculo_id).eq("status", "ORCAMENTO").eq("empresa_id", req.empresa_id).execute().data
     if os_aberta:
         return {"os_id": os_aberta[0]["id"]}
@@ -121,6 +124,7 @@ def abrir_os(req: schemas.CriarOSRequest):
     return {"os_id": nova_os["id"]}
 
 async def executar_cadastro_rapido(req: schemas.CadastroRapidoRequest):
+    garantir_da_empresa("usuarios", req.mecanico_id, req.empresa_id, "Mecânico")
     placa_limpa = req.placa.upper().replace("-", "").replace(" ", "")
 
     # Idempotência: se o veículo já existir na empresa, reaproveita o cadastro
@@ -181,6 +185,7 @@ def atualizar_dados_os(req: schemas.AtualizarOSRequest):
 # 5. O DESTRUIDOR DE FRICÇÃO (Áudio In-Memory direto pro Gemini)
 # ==========================================
 async def processar_e_injetar_audio(req: schemas.ProcessarAudioRequest):
+    garantir_da_empresa("ordens_servico", req.os_id, req.empresa_id, "Ordem de Serviço")
     resp = await http_client.get(req.url_audio)
     resp.raise_for_status()
 
