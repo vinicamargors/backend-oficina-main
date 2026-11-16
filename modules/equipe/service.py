@@ -1,3 +1,4 @@
+import calendar
 import math
 from datetime import datetime, date
 from typing import Optional
@@ -248,7 +249,7 @@ def lancar_folha_contas_a_pagar(empresa_id: str, dados: LancarFolhaInput) -> Lan
         cfg = supabase.table("configuracoes_empresa").select("dia_pagamento_folha").eq("empresa_id", empresa_id).execute().data
         dia_folha = int(cfg[0].get("dia_pagamento_folha") or 5) if cfg else 5
 
-        hoje = date.today()
+        hoje = agora_br().date()
         # Se hoje já passou do dia_folha, lança pro próximo mês, senão pro mês atual
         ano = hoje.year
         mes = hoje.month
@@ -257,8 +258,8 @@ def lancar_folha_contas_a_pagar(empresa_id: str, dados: LancarFolhaInput) -> Lan
             if mes > 12:
                 mes = 1
                 ano += 1
-        dia_safe = min(dia_folha, 28)
-        vencimento = date(ano, mes, dia_safe)
+        # dia 31 em fevereiro vira o último dia do mês
+        vencimento = date(ano, mes, min(dia_folha, calendar.monthrange(ano, mes)[1]))
 
     descricao = dados.descricao_custom or f"Folha de Pagamento Equipe - Ref: {dados.mes_referencia}"
 

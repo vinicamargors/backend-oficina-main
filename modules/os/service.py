@@ -4,6 +4,7 @@ from core.database import supabase
 from core.security import garantir_da_empresa
 from core.estoque_rpc import baixar_estoque, devolver_estoque
 from datetime import datetime, timezone, timedelta
+from core.tempo import agora_br
 from typing import List
 from .schemas import OSCreate, OSUpdate, OSItemCreate, OSItemUpdate
 
@@ -154,7 +155,7 @@ def atualizar_os(os_id: str, empresa_id: str, dados: OSUpdate):
         _sincronizar_km_veiculo(str(os_atual["veiculo_id"]), empresa_id, campos["km_atual"])
 
     if campos.get("status") in ["FINALIZADO", "PAGO"] and not os_atual.get("data_fechamento"):
-        campos["data_fechamento"] = datetime.now().isoformat()
+        campos["data_fechamento"] = agora_br().isoformat()
 
     response = supabase.table("ordens_servico").update(campos).eq("id", os_id).eq("empresa_id", empresa_id).execute()
     return response.data[0]
