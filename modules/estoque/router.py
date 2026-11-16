@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from typing import Optional
 from uuid import UUID
 from . import schemas, service
@@ -22,6 +22,11 @@ def post_categoria(empresa_id: UUID, dados: schemas.CategoriaCreate):
 @router.delete("/{empresa_id}/categorias/{nome}")
 def delete_categoria(empresa_id: UUID, nome: str):
     return service.excluir_categoria(str(empresa_id), nome)
+
+@router.get("/{empresa_id}/paginado", response_model=schemas.EstoquePaginatedResponse)
+def get_estoque_paginado(empresa_id: UUID, categoria: Optional[str] = None, busca: Optional[str] = None,
+                         skip: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=200)):
+    return service.listar_estoque_paginado(str(empresa_id), categoria, busca, skip, limit)
 
 @router.get("/{empresa_id}/{item_id}", response_model=schemas.EstoqueResponse)
 def get_item_estoque(empresa_id: UUID, item_id: UUID):

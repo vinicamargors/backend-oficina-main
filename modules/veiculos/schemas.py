@@ -34,3 +34,9 @@ class VeiculoResponse(VeiculoBase):
     id: UUID
     # O Supabase devolve o Join como um dicionário. O Pydantic mastiga pra gente.
     clientes: Optional[ClienteResumo] = None
+
+class VeiculoPaginatedResponse(BaseModel):
+    items: list[VeiculoResponse]
+    total: int
+    skip: int
+    limit: int

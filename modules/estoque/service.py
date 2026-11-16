@@ -1,6 +1,7 @@
 from fastapi import HTTPException
 from core.database import supabase
 from core.estoque_rpc import baixar_estoque, devolver_estoque
+from core.paginacao import or_ilike, pagina
 from .schemas import EstoqueCreate, EstoqueUpdate, EstoqueAjuste, normalizar_categoria
 
 # Categorias que toda oficina começa tendo. MAO_OBRA não entra: é de serviço, não de peça (a OS filtra por ela).
@@ -42,6 +43,15 @@ def excluir_categoria(empresa_id: str, nome: str):
     movidos = supabase.table("estoque").update({"categoria": CATEGORIA_RESERVA}).eq("empresa_id", empresa_id).eq("categoria", nome).execute().data
     supabase.table("categorias_estoque").delete().eq("empresa_id", empresa_id).eq("nome", nome).execute()
     return {"status": "sucesso", "itens_reclassificados": len(movidos)}
+
+def listar_estoque_paginado(empresa_id: str, categoria: str = None, busca: str = None, skip: int = 0, limit: int = 50):
+    q = supabase.table("estoque").select("*", count="exact").eq("empresa_id", empresa_id)
+    if categoria:
+        q = q.eq("categoria", categoria.strip().upper())
+    if busca and busca.strip():
+        q = q.or_(or_ilike(("nome", busca), ("codigo", busca)))
+    return pagina(q.order("nome").order("id"), skip, limit)
+
 
 def listar_estoque(empresa_id: str, categoria: str = None):
     query = supabase.table("estoque").select("*").eq("empresa_id", empresa_id)

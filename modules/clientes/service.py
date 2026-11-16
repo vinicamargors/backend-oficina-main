@@ -1,9 +1,16 @@
 from core.database import supabase
 from .schemas import ClienteCreate, ClienteUpdate
 from fastapi import HTTPException
+from core.paginacao import or_ilike, pagina
 
 def listar_clientes_por_empresa(empresa_id: str):
     return supabase.table("clientes").select("*").eq("empresa_id", empresa_id).order("nome").execute().data
+
+def listar_clientes_paginado(empresa_id: str, busca: str = None, skip: int = 0, limit: int = 50):
+    q = supabase.table("clientes").select("*", count="exact").eq("empresa_id", empresa_id)
+    if busca and busca.strip():
+        q = q.or_(or_ilike(("nome", busca), ("telefone", busca), ("cpf_cnpj", busca)))
+    return pagina(q.order("nome").order("id"), skip, limit)
 
 def obter_cliente_por_id(cliente_id: str, empresa_id: str):
     response = supabase.table("clientes").select("*").eq("id", cliente_id).eq("empresa_id", empresa_id).execute()

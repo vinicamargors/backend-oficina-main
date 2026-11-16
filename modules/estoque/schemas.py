@@ -64,3 +64,9 @@ class CategoriaResponse(BaseModel):
 class EstoqueListResponse(BaseModel):
     itens: list[EstoqueResponse]
     stats: EstoqueStats
+
+class EstoquePaginatedResponse(BaseModel):
+    items: list[EstoqueResponse]
+    total: int
+    skip: int
+    limit: int
