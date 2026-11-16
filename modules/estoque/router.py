@@ -28,6 +28,10 @@ def get_estoque_paginado(empresa_id: UUID, categoria: Optional[str] = None, busc
                          skip: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=200)):
     return service.listar_estoque_paginado(str(empresa_id), categoria, busca, skip, limit)
 
+@router.get("/{empresa_id}/resumo", response_model=schemas.EstoqueStats)
+def get_resumo_estoque(empresa_id: UUID, categoria: Optional[str] = None):
+    return service.resumo_estoque(str(empresa_id), categoria)
+
 @router.get("/{empresa_id}/{item_id}", response_model=schemas.EstoqueResponse)
 def get_item_estoque(empresa_id: UUID, item_id: UUID):
     return service.obter_item(str(item_id), str(empresa_id))
