@@ -3,6 +3,7 @@ import httpx
 from fastapi import HTTPException
 from core.database import supabase
 from core.security import garantir_da_empresa
+from core.paginacao import or_ilike, pagina
 from .schemas import VeiculoCreate, VeiculoUpdate
 
 http_client = httpx.AsyncClient(timeout=5.0)
@@ -32,6 +33,14 @@ def listar_veiculos(empresa_id: str, placa: str = None):
     if placa:
         query = query.eq("placa", placa.upper())
     return query.order("placa").execute().data
+
+def listar_veiculos_paginado(empresa_id: str, busca: str = None, cliente_id: str = None, skip: int = 0, limit: int = 50):
+    q = supabase.table("veiculos").select("*, clientes(nome, telefone)", count="exact").eq("empresa_id", empresa_id)
+    if cliente_id:
+        q = q.eq("cliente_id", cliente_id)
+    if busca and busca.strip():
+        q = q.or_(or_ilike(("placa", busca), ("modelo", busca), ("marca", busca)))
+    return pagina(q.order("placa").order("id"), skip, limit)
 
 def obter_veiculo_por_id(veiculo_id: str, empresa_id: str):
     response = supabase.table("veiculos").select("*").eq("id", veiculo_id).eq("empresa_id", empresa_id).execute()

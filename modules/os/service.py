@@ -2,6 +2,7 @@ from fastapi import HTTPException
 from postgrest.exceptions import APIError
 from core.database import supabase
 from core.security import garantir_da_empresa
+from core.paginacao import or_ilike, pagina
 from core.estoque_rpc import baixar_estoque, devolver_estoque
 from datetime import datetime, timezone, timedelta
 from core.tempo import agora_br
@@ -23,11 +24,23 @@ def listar_os(
     cliente_id: str = None,
     veiculo_id: str = None,
 ):
-    """O Radar do Pátio: Puxa as OS com paginação pesada e auditoria de volume total."""
-    query = supabase.table("ordens_servico").select(
-        "id, cliente_id, veiculo_id, km_atual, status, data_abertura, total_geral, descricao_problema, clientes(nome, telefone), veiculos(placa, modelo)",
-        count="exact"
-    ).eq("empresa_id", empresa_id)
+    """O Radar do Pátio: filtra e pagina no banco. Com `search`, consulta a view os_busca (migration 006)."""
+    busca = bool(search and search.strip())
+    if busca:
+        query = supabase.table("os_busca").select(
+            "id, cliente_id, veiculo_id, km_atual, status, data_abertura, total_geral, descricao_problema, cliente_nome, cliente_telefone, veiculo_placa, veiculo_modelo",
+            count="exact")
+        termo = search.strip()
+        alfanum = "".join(c for c in termo if c.isalnum())
+        pares = [("busca", termo)]
+        if len(alfanum) >= 2 and alfanum != termo:
+            pares.append(("placa_limpa", alfanum))  # "abc-1234" acha a placa gravada como ABC1234
+        query = query.or_(or_ilike(*pares))
+    else:
+        query = supabase.table("ordens_servico").select(
+            "id, cliente_id, veiculo_id, km_atual, status, data_abertura, total_geral, descricao_problema, clientes(nome, telefone), veiculos(placa, modelo)",
+            count="exact")
+    query = query.eq("empresa_id", empresa_id)
 
     if status:
         query = query.eq("status", status.upper())
@@ -52,45 +65,14 @@ def listar_os(
         query = query.order("total_geral", desc=False)
     else:
         query = query.order("data_abertura", desc=True)
+    query = query.order("id")  # desempate: sem ele a página pode repetir/pular OS com a mesma data
 
-    # 1. MODO BUSCA ATIVADA (Mantido em memória — Armadilha #4: PostgREST não aceita .or_() em joins)
-    if search:
-        response = query.limit(5000).execute()
-        todas_os = response.data
-        termo = search.lower()
-        termo_alfanum = "".join(c for c in termo if c.isalnum())
-        filtradas = []
-
-        for os in todas_os:
-            clientes = os.get("clientes") or {}
-            veiculos = os.get("veiculos") or {}
-
-            cli_nome = str(clientes.get("nome", "")).lower()
-            vei_placa = str(veiculos.get("placa", "")).lower()
-            vei_placa_limpa = "".join(c for c in vei_placa if c.isalnum())
-            vei_modelo = str(veiculos.get("modelo", "")).lower()
-            os_id = str(os.get("id", "")).lower()
-            desc = str(os.get("descricao_problema") or "").lower()
-
-            if (termo in cli_nome or termo in vei_placa or termo in vei_modelo or termo in os_id or termo in desc
-                    or (len(termo_alfanum) >= 2 and termo_alfanum in vei_placa_limpa)):
-                filtradas.append(os)
-
-        return {
-            "items": filtradas[skip : skip + limit],
-            "total": len(filtradas),
-            "skip": skip,
-            "limit": limit
-        }
-
-    # 2. MODO LISTAGEM PADRÃO
-    response = query.range(skip, skip + limit - 1).execute()
-    return {
-        "items": response.data,
-        "total": response.count or 0,
-        "skip": skip,
-        "limit": limit
-    }
+    resp = pagina(query, skip, limit)
+    if busca:  # mesmo formato da listagem padrão (clientes{}, veiculos{})
+        for o in resp["items"]:
+            o["clientes"] = {"nome": o.pop("cliente_nome"), "telefone": o.pop("cliente_telefone")}
+            o["veiculos"] = {"placa": o.pop("veiculo_placa"), "modelo": o.pop("veiculo_modelo")}
+    return resp
 
 def recalcular_totais_os(os_id: str):
     """Mão invisível que ajusta o faturamento da OS automaticamente"""

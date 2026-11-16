@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
+from typing import Optional
 from uuid import UUID
 from . import schemas, service
 from core.security import validar_passaporte, empresa_do_usuario
@@ -8,6 +9,11 @@ router = APIRouter(dependencies=[Depends(validar_passaporte)])
 @router.get("/{empresa_id}", response_model=list[schemas.ClienteResponse])
 def get_clientes(empresa_id: UUID):
     return service.listar_clientes_por_empresa(str(empresa_id))
+
+# Antes de /{empresa_id}/{cliente_id}, senão "paginado" seria lido como id
+@router.get("/{empresa_id}/paginado", response_model=schemas.ClientePaginatedResponse)
+def get_clientes_paginado(empresa_id: UUID, busca: Optional[str] = None, skip: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=200)):
+    return service.listar_clientes_paginado(str(empresa_id), busca, skip, limit)
 
 @router.get("/{empresa_id}/{cliente_id}", response_model=schemas.ClienteResponse)
 def get_cliente_por_id(empresa_id: UUID, cliente_id: UUID):
