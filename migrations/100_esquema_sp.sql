@@ -384,6 +384,19 @@ BEGIN
   RETURN jsonb_build_object('status', 'sucesso');
 END $$;
 
+-- ------------------------------------------------------------------ busca de OS (Fase 7 / T-002, = migration 006)
+-- security_invoker: a view obedece ao RLS de quem consulta. shortcut: sem índice pg_trgm; criar se uma oficina passar de ~50 mil OS.
+CREATE VIEW public.os_busca WITH (security_invoker = true) AS
+SELECT o.id, o.empresa_id, o.cliente_id, o.veiculo_id, o.km_atual, o.status, o.data_abertura,
+       o.total_geral, o.descricao_problema,
+       c.nome AS cliente_nome, c.telefone AS cliente_telefone,
+       v.placa AS veiculo_placa, v.modelo AS veiculo_modelo,
+       concat_ws(' ', c.nome, v.placa, v.modelo, o.id::text, o.descricao_problema) AS busca,
+       regexp_replace(coalesce(v.placa, ''), '[^a-zA-Z0-9]', '', 'g') AS placa_limpa
+  FROM public.ordens_servico o
+  LEFT JOIN public.clientes c ON c.id = o.cliente_id
+  LEFT JOIN public.veiculos v ON v.id = o.veiculo_id;
+
 -- ------------------------------------------------------------------ acesso: só o backend
 -- RLS ligado sem policy + nenhum privilégio: a chave anon e o JWT do usuário não leem nem gravam nada.
 DO $$
