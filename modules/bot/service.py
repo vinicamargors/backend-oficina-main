@@ -1,12 +1,15 @@
 import os
 import json
+import re
+import unicodedata
+from urllib.parse import urlparse
 import httpx
 from fastapi import HTTPException
 from google import genai
 from google.genai import types
 from core.database import supabase
 from core.estoque_rpc import baixar_estoque
-from core.security import limpar_telefone
+from core.security import garantir_da_empresa, limpar_telefone
 
 from . import schemas
 from modules.os.schemas import OSUpdate
@@ -20,6 +23,28 @@ from modules.veiculos.service import consultar_placa_externa
 CHAVE_API = os.getenv("GEMINI_API_KEY")
 gemini_client = genai.Client(api_key=CHAVE_API) if CHAVE_API else None
 http_client = httpx.AsyncClient(timeout=15.0)
+
+def _dominios_audio() -> list[str]:
+    """BOT_AUDIO_DOMAINS="a.com,b.com": de onde o bot aceita baixar áudio (o domínio e seus subdomínios)."""
+    return [d.strip().lower() for d in os.getenv("BOT_AUDIO_DOMAINS", "").split(",") if d.strip()]
+
+
+def validar_url_audio(url: str) -> None:
+    """Domínio fora da lista (ou lista vazia) → erro claro, antes de qualquer download (evita SSRF)."""
+    permitidos = _dominios_audio()
+    if not permitidos:
+        raise HTTPException(status_code=503, detail="Bot sem domínios de áudio configurados (BOT_AUDIO_DOMAINS).")
+    p = urlparse(url or "")
+    host = (p.hostname or "").lower()
+    if p.scheme != "https" or not any(host == d or host.endswith("." + d) for d in permitidos):
+        raise HTTPException(status_code=400, detail="url_audio fora dos domínios permitidos (use https de um domínio autorizado).")
+
+
+def normalizar_nome(nome: str) -> str:
+    """Minúsculas, sem acento, sem pontuação, espaços únicos: 'Filtro  de Óleo!' == 'filtro de oleo'."""
+    sem_acento = unicodedata.normalize("NFKD", nome or "").encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", " ", sem_acento.lower()).strip()
+
 
 # ==========================================
 # 2. IDENTIFICAÇÃO (A Catraca do Sistema)
@@ -107,6 +132,9 @@ def buscar_os_ativa_por_placa_cliente(empresa_id: str, termo_busca: str):
 # 4. ABERTURA DE ORDEM DE SERVIÇO
 # ==========================================
 def abrir_os(req: schemas.CriarOSRequest):
+    garantir_da_empresa("clientes", req.cliente_id, req.empresa_id, "Cliente")
+    garantir_da_empresa("veiculos", req.veiculo_id, req.empresa_id, "Veículo")
+    garantir_da_empresa("usuarios", req.mecanico_id, req.empresa_id, "Mecânico")
     os_aberta = supabase.table("ordens_servico").select("id").eq("veiculo_id", req.veiculo_id).eq("status", "ORCAMENTO").eq("empresa_id", req.empresa_id).execute().data
     if os_aberta:
         return {"os_id": os_aberta[0]["id"]}
@@ -121,6 +149,7 @@ def abrir_os(req: schemas.CriarOSRequest):
     return {"os_id": nova_os["id"]}
 
 async def executar_cadastro_rapido(req: schemas.CadastroRapidoRequest):
+    garantir_da_empresa("usuarios", req.mecanico_id, req.empresa_id, "Mecânico")
     placa_limpa = req.placa.upper().replace("-", "").replace(" ", "")
 
     # Idempotência: se o veículo já existir na empresa, reaproveita o cadastro
@@ -181,8 +210,13 @@ def atualizar_dados_os(req: schemas.AtualizarOSRequest):
 # 5. O DESTRUIDOR DE FRICÇÃO (Áudio In-Memory direto pro Gemini)
 # ==========================================
 async def processar_e_injetar_audio(req: schemas.ProcessarAudioRequest):
-    resp = await http_client.get(req.url_audio)
-    resp.raise_for_status()
+    garantir_da_empresa("ordens_servico", req.os_id, req.empresa_id, "Ordem de Serviço")
+    validar_url_audio(req.url_audio)
+    try:
+        resp = await http_client.get(req.url_audio)  # sem seguir redirecionamento: não escapa da lista
+        resp.raise_for_status()
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="Não foi possível baixar o áudio.")
 
     audio_part = types.Part.from_bytes(data=resp.content, mime_type="audio/ogg")
     prompt = """
@@ -194,7 +228,7 @@ async def processar_e_injetar_audio(req: schemas.ProcessarAudioRequest):
 
     if gemini_client is None:
         raise HTTPException(status_code=503, detail="IA do bot não configurada neste servidor (GEMINI_API_KEY).")
-    response = gemini_client.models.generate_content(
+    response = await gemini_client.aio.models.generate_content(
         model='gemini-3.1-flash-lite',
         contents=[audio_part, prompt],
         config=types.GenerateContentConfig(
@@ -213,8 +247,8 @@ async def processar_e_injetar_audio(req: schemas.ProcessarAudioRequest):
         custo_unitario = 0.0
 
         if item["tipo"] == "PECA" and estoque_empresa:
-            nome_lower = item["nome_item"].lower()
-            match = next((e for e in estoque_empresa if e["nome"].lower() in nome_lower or nome_lower in e["nome"].lower()), None)
+            alvo = normalizar_nome(item["nome_item"])
+            match = next((e for e in estoque_empresa if alvo and normalizar_nome(e["nome"]) == alvo), None)  # exato: "filtro" não casa com "filtro de ar"
             if match:
                 try:
                     baixar_estoque(match["id"], req.empresa_id, item["quantidade"])

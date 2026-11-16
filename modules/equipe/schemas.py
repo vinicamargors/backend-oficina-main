@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, Literal
 from uuid import UUID
 from datetime import date, datetime
@@ -14,7 +14,12 @@ class EscalaFolgaBase(BaseModel):
     observacoes: Optional[str] = None
 
 class EscalaFolgaCreate(EscalaFolgaBase):
-    pass
+    # Só na entrada: a resposta lê linhas antigas do banco e não pode quebrar por causa delas.
+    @model_validator(mode="after")
+    def _periodo_valido(self):
+        if self.data_fim < self.data_inicio:
+            raise ValueError("A data final não pode ser antes da data inicial.")
+        return self
 
 class EscalaFolgaResponse(EscalaFolgaBase):
     id: UUID

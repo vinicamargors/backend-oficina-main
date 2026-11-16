@@ -23,8 +23,8 @@ def listar_ordens_servico(
     ordenacao: Optional[str] = Query("data_desc", description="data_desc, data_asc, valor_desc, valor_asc"),
     cliente_id: Optional[UUID] = Query(None, description="Histórico de um cliente"),
     veiculo_id: Optional[UUID] = Query(None, description="Histórico de um veículo"),
-    skip: int = Query(0, description="Para paginação: quantos registros pular"),
-    limit: int = Query(50, description="Limite de registros por tela")
+    skip: int = Query(0, ge=0, description="Para paginação: quantos registros pular"),
+    limit: int = Query(50, ge=1, le=500, description="Limite de registros por tela (máx. 500)")
 ):
     """
     Retorna a esteira de valor da oficina de forma empacotada. 

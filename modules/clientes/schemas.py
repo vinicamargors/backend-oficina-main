@@ -21,3 +21,9 @@ class ClienteUpdate(BaseModel):
 
 class ClienteResponse(ClienteBase):
     id: UUID
+
+class ClientePaginatedResponse(BaseModel):
+    items: list[ClienteResponse]
+    total: int
+    skip: int
+    limit: int

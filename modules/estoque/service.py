@@ -1,6 +1,8 @@
 from fastapi import HTTPException
 from core.database import supabase
+from core.consulta import todas
 from core.estoque_rpc import baixar_estoque, devolver_estoque
+from core.paginacao import or_ilike, pagina
 from .schemas import EstoqueCreate, EstoqueUpdate, EstoqueAjuste, normalizar_categoria
 
 # Categorias que toda oficina começa tendo. MAO_OBRA não entra: é de serviço, não de peça (a OS filtra por ela).
@@ -43,32 +45,49 @@ def excluir_categoria(empresa_id: str, nome: str):
     supabase.table("categorias_estoque").delete().eq("empresa_id", empresa_id).eq("nome", nome).execute()
     return {"status": "sucesso", "itens_reclassificados": len(movidos)}
 
-def listar_estoque(empresa_id: str, categoria: str = None):
-    query = supabase.table("estoque").select("*").eq("empresa_id", empresa_id)
+def listar_estoque_paginado(empresa_id: str, categoria: str = None, busca: str = None, skip: int = 0, limit: int = 50):
+    q = supabase.table("estoque").select("*", count="exact").eq("empresa_id", empresa_id)
     if categoria:
-        query = query.eq("categoria", categoria.strip().upper())
+        q = q.eq("categoria", categoria.strip().upper())
+    if busca and busca.strip():
+        q = q.or_(or_ilike(("nome", busca), ("codigo", busca)))
+    return pagina(q.order("nome").order("id"), skip, limit)
 
-    itens = query.order("nome").execute().data
 
+def _stats(itens: list) -> dict:
     estoque_baixo = 0
     valor_custo = 0.0
     valor_venda = 0.0
     for i in itens:
         qtd = i["quantidade"]
-        if qtd <= i.get("minimo_alerta", 5):
+        minimo = i.get("minimo_alerta")
+        if qtd <= (5 if minimo is None else minimo):
             estoque_baixo += 1
         valor_custo += qtd * i["custo"]
         valor_venda += qtd * i["venda"]
-
     return {
-        "itens": itens,
-        "stats": {
-            "total_itens": len(itens),
-            "estoque_baixo": estoque_baixo,
-            "valor_total_custo": round(valor_custo, 2),
-            "valor_total_venda": round(valor_venda, 2)
-        }
+        "total_itens": len(itens),
+        "estoque_baixo": estoque_baixo,
+        "valor_total_custo": round(valor_custo, 2),
+        "valor_total_venda": round(valor_venda, 2),
     }
+
+
+def resumo_estoque(empresa_id: str, categoria: str = None):
+    """Totais calculados aqui para o front não baixar o estoque inteiro só para somar."""
+    query = supabase.table("estoque").select("quantidade, custo, venda, minimo_alerta").eq("empresa_id", empresa_id).order("id")
+    if categoria:
+        query = query.eq("categoria", categoria.strip().upper())
+    return _stats(todas(query))
+
+
+def listar_estoque(empresa_id: str, categoria: str = None):
+    query = supabase.table("estoque").select("*").eq("empresa_id", empresa_id)
+    if categoria:
+        query = query.eq("categoria", categoria.strip().upper())
+
+    itens = todas(query.order("nome").order("id"))
+    return {"itens": itens, "stats": _stats(itens)}
 
 def obter_item(item_id: str, empresa_id: str):
     response = supabase.table("estoque").select("*").eq("id", item_id).eq("empresa_id", empresa_id).execute()
