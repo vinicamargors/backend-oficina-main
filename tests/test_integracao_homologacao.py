@@ -47,4 +47,5 @@ def test_anon_nao_le_nada_pela_api_rest(http):
     url = f"{os.environ['SUPABASE_URL']}/rest/v1/clientes?select=id&limit=1"
     chave = os.environ["SUPABASE_ANON_KEY"]
     r = http.get(url, headers={"apikey": chave, "Authorization": f"Bearer {chave}"})
-    assert r.status_code == 200 and r.json() == []
+    # base antiga: RLS devolve lista vazia; base nova (100_esquema_sp): anon sem privilégio nenhum → 401
+    assert r.status_code in (401, 403) or (r.status_code == 200 and r.json() == [])
