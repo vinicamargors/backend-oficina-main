@@ -11,7 +11,7 @@ class EscalaFolgaBase(BaseModel):
     tipo: TipoEscala
     data_inicio: date
     data_fim: date
-    observacoes: Optional[str] = None
+    observacoes: Optional[str] = Field(None, max_length=500)
 
 class EscalaFolgaCreate(EscalaFolgaBase):
     # Só na entrada: a resposta lê linhas antigas do banco e não pode quebrar por causa delas.
@@ -34,8 +34,8 @@ TipoPonto = Literal['ENTRADA', 'ALMOCO_SAIDA', 'ALMOCO_RETORNO', 'SAIDA']
 class PontoEletronicoCreate(BaseModel):
     # Quem bate o ponto é o usuário do token e data/hora são do servidor: nada disso vem do cliente.
     tipo: TipoPonto
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
+    latitude: Optional[float] = Field(None, ge=-90, le=90)
+    longitude: Optional[float] = Field(None, ge=-180, le=180)
 
 class PontoEletronicoResponse(BaseModel):
     id: UUID
@@ -85,7 +85,7 @@ class AvaliacaoOSResponse(BaseModel):
 
 # Lançamento Automático da Folha no Contas a Pagar
 class LancarFolhaInput(BaseModel):
-    mes_referencia: str  # Ex: "10/2026"
+    mes_referencia: str = Field(..., pattern=r"^(0[1-9]|1[0-2])/(20\d\d|21\d\d)$")  # MM/AAAA, ex.: "10/2026"
     data_vencimento: Optional[date] = None
     incluir_vales: bool = True
     descricao_custom: Optional[str] = None

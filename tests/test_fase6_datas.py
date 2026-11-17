@@ -63,5 +63,5 @@ def test_vencimento_folha(monkeypatch, hoje, dia, esperado):
     fake = _Fake(dia)
     monkeypatch.setattr(service, "supabase", fake)
     monkeypatch.setattr(service, "agora_br", lambda: hoje)
-    service.lancar_folha_contas_a_pagar("e", LancarFolhaInput(mes_referencia="x"))
+    service.lancar_folha_contas_a_pagar("e", LancarFolhaInput(mes_referencia="10/2026"))
     assert fake.inserido["data_vencimento"] == esperado

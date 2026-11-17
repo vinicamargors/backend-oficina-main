@@ -12,9 +12,9 @@ class BuscaRequest(BaseModel):
 class CadastroRapidoRequest(BaseModel):
     empresa_id: str
     mecanico_id: str
-    nome_cliente: str
-    telefone_cliente: str
-    placa: str
+    nome_cliente: str = Field(..., max_length=150)
+    telefone_cliente: str = Field(..., max_length=20)
+    placa: str = Field(..., max_length=10)
 
 class CriarOSRequest(BaseModel):
     empresa_id: str

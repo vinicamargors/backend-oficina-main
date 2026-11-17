@@ -31,9 +31,9 @@ class ConfigUpdate(BaseModel):
     cor_primaria: Optional[str] = None
     cor_secundaria: Optional[str] = None
     logo_b64: Optional[str] = None
-    inscricao_estadual: Optional[str] = None
-    whatsapp: Optional[str] = None
-    chave_pix: Optional[str] = None
+    inscricao_estadual: Optional[str] = Field(None, max_length=50)
+    whatsapp: Optional[str] = Field(None, max_length=30)
+    chave_pix: Optional[str] = Field(None, max_length=100)
     latitude_gps: Optional[float] = None
     longitude_gps: Optional[float] = None
     raio_gps_metros: Optional[int] = None

@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Literal
 from uuid import UUID
+from core.pagamento import FormaPagamento
 from datetime import date, datetime
 
 TipoTransacao = Literal['DESPESA', 'RECEITA']
@@ -19,7 +20,7 @@ class TransacaoBase(BaseModel):
     empresa_id: UUID
 
 class TransacaoCreate(TransacaoBase):
-    pass
+    forma_pagamento: FormaPagamento = None
 
 class TransacaoUpdate(BaseModel):
     tipo: Optional[TipoTransacao] = None
@@ -29,12 +30,12 @@ class TransacaoUpdate(BaseModel):
     data_vencimento: Optional[date] = None
     data_liquidacao: Optional[date] = None
     status: Optional[StatusTransacao] = None
-    forma_pagamento: Optional[str] = None
+    forma_pagamento: FormaPagamento = None
     observacoes: Optional[str] = None
 
 class TransacaoLiquidar(BaseModel):
     data_liquidacao: Optional[date] = None
-    forma_pagamento: Optional[str] = None
+    forma_pagamento: FormaPagamento = None
 
 class TransacaoResponse(TransacaoBase):
     id: UUID

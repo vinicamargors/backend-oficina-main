@@ -4,21 +4,21 @@ from uuid import UUID
 
 
 def normalizar_categoria(valor: str) -> str:
-    """Categoria é texto livre da oficina: sem espaços nas pontas, MAIÚSCULAS, 1–40 caracteres (o banco confere de novo)."""
+    """Categoria é texto livre da oficina: sem espaços nas pontas, MAIÚSCULAS, 1–30 caracteres (coluna estoque.categoria é varchar(30))."""
     nome = " ".join(str(valor).split()).upper()
-    if not 1 <= len(nome) <= 40:
-        raise ValueError("A categoria precisa ter de 1 a 40 caracteres.")
+    if not 1 <= len(nome) <= 30:
+        raise ValueError("A categoria precisa ter de 1 a 30 caracteres.")
     return nome
 
 
 class EstoqueBase(BaseModel):
-    nome: str
+    nome: str = Field(..., max_length=200)
     categoria: str = 'PECAS'
     quantidade: int = Field(default=0, ge=0)
     custo: float = Field(default=0.0, ge=0.0)
     venda: float = Field(default=0.0, ge=0.0)
     minimo_alerta: int = Field(default=5, ge=0)
-    codigo: Optional[str] = None
+    codigo: Optional[str] = Field(None, max_length=50)
     empresa_id: UUID
 
     _categoria = field_validator("categoria")(normalizar_categoria)
@@ -27,13 +27,13 @@ class EstoqueCreate(EstoqueBase):
     pass
 
 class EstoqueUpdate(BaseModel):
-    nome: Optional[str] = None
+    nome: Optional[str] = Field(None, max_length=200)
     categoria: Optional[str] = None
     quantidade: Optional[int] = Field(None, ge=0)
     custo: Optional[float] = Field(None, ge=0.0)
     venda: Optional[float] = Field(None, ge=0.0)
     minimo_alerta: Optional[int] = Field(None, ge=0)
-    codigo: Optional[str] = None
+    codigo: Optional[str] = Field(None, max_length=50)
 
     @field_validator("categoria")
     @classmethod

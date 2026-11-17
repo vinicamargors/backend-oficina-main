@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Literal, List, Any, Dict
 from uuid import UUID
+from core.pagamento import FormaPagamento
 from datetime import datetime
 
 class OSCreate(BaseModel):
@@ -16,19 +17,19 @@ class OSUpdate(BaseModel):
     descricao_problema: Optional[str] = None
     km_atual: Optional[int] = None
     status: Optional[Literal['ORCAMENTO', 'AGUARDANDO_PECA', 'EXECUCAO', 'FINALIZADO', 'PAGO']] = None
-    forma_pagamento: Optional[str] = None
+    forma_pagamento: FormaPagamento = None
 
 class OSItemCreate(BaseModel):
     estoque_id: Optional[UUID] = None
     tipo: Literal['PECA', 'MAO_OBRA', 'TERCEIRIZADO']
-    nome_item: str
+    nome_item: str = Field(..., max_length=200)
     quantidade: int = Field(default=1, gt=0)
     custo_unitario: float = Field(default=0.0)
     venda_unitario: float = Field(default=0.0)
 
 class OSItemUpdate(BaseModel):
     tipo: Optional[Literal['PECA', 'MAO_OBRA', 'TERCEIRIZADO']] = None
-    nome_item: Optional[str] = None
+    nome_item: Optional[str] = Field(None, max_length=200)
     quantidade: Optional[int] = Field(default=None, gt=0)
     custo_unitario: Optional[float] = None
     venda_unitario: Optional[float] = None

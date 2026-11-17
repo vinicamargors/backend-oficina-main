@@ -2,7 +2,7 @@
 
 
 def _pad(termo: str) -> str:
-    t = termo.strip().replace("\\", "\\\\").replace("%", "\%").replace("_", "\_")
+    t = termo.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return f"%{t}%"
 
 

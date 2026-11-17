@@ -1,7 +1,19 @@
+import logging
 from fastapi import HTTPException
 from core.database import supabase, supabase_admin
 from core.security import limpar_telefone
 from .schemas import UsuarioCreate, UsuarioUpdate
+
+log = logging.getLogger("mecanify.erros")
+
+
+def _erro_auth(e: Exception, padrao: str) -> str:
+    """Texto do provedor de login (em inglês, técnico) fica no log; o cliente recebe português da oficina."""
+    log.error("Erro do provedor de Auth: %s", e)
+    if any(p in str(e).lower() for p in ("already", "registered", "exists", "duplicate")):
+        return "Já existe um usuário com este e-mail."
+    return padrao
+
 
 def listar_usuarios(empresa_id: str):
     return supabase.table("usuarios").select("*").eq("empresa_id", empresa_id).order("nome").execute().data
@@ -19,7 +31,7 @@ def criar_usuario(dados: UsuarioCreate, empresa_id: str):
             "email_confirm": True
         })
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Erro na provedora de Auth: {str(e)}")
+        raise HTTPException(status_code=400, detail=_erro_auth(e, "Não foi possível criar o acesso deste usuário."))
 
     db_data = {
         "id": user_auth.user.id,
@@ -76,7 +88,7 @@ def atualizar_usuario(usuario_id: str, empresa_id: str, dados: UsuarioUpdate):
                     })
                     senha_sincronizada = True
             except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Erro ao sincronizar senha no Supabase Auth: {str(e)}")
+                raise HTTPException(status_code=400, detail=_erro_auth(e, "Não foi possível trocar a senha agora."))
 
         if not senha_sincronizada:
             raise HTTPException(status_code=400, detail="Não foi possível sincronizar a senha com o provedor de autenticação.")

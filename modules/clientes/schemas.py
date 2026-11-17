@@ -1,11 +1,11 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from uuid import UUID
 
 class ClienteBase(BaseModel):
-    nome: str
-    telefone: str
-    cpf_cnpj: Optional[str] = None
+    nome: str = Field(..., max_length=150)
+    telefone: str = Field(..., max_length=20)
+    cpf_cnpj: Optional[str] = Field(None, max_length=20)
     endereco: Optional[str] = None
     empresa_id: UUID
 
@@ -14,9 +14,9 @@ class ClienteCreate(ClienteBase):
 
 # Para o UPDATE, o usuário altera apenas o que quiser. Liberdade total.
 class ClienteUpdate(BaseModel):
-    nome: Optional[str] = None
-    telefone: Optional[str] = None
-    cpf_cnpj: Optional[str] = None
+    nome: Optional[str] = Field(None, max_length=150)
+    telefone: Optional[str] = Field(None, max_length=20)
+    cpf_cnpj: Optional[str] = Field(None, max_length=20)
     endereco: Optional[str] = None
 
 class ClienteResponse(ClienteBase):

@@ -3,8 +3,8 @@ from typing import Optional, Literal
 from uuid import UUID
 
 class UsuarioBase(BaseModel):
-    nome: str
-    email: EmailStr
+    nome: str = Field(..., max_length=100)
+    email: EmailStr = Field(..., max_length=255)
     telefone: Optional[str] = None
     cargo: Literal['master', 'DONO', 'MECANICO', 'ATENDENTE', 'FINANCEIRO']
     ativo: bool = True
@@ -22,8 +22,8 @@ class UsuarioCreate(UsuarioBase):
     senha: str = Field(..., min_length=6)
 
 class UsuarioUpdate(BaseModel):
-    nome: Optional[str] = None
-    email: Optional[EmailStr] = None
+    nome: Optional[str] = Field(None, max_length=100)
+    email: Optional[EmailStr] = Field(None, max_length=255)
     telefone: Optional[str] = None
     cargo: Optional[Literal['master', 'DONO', 'MECANICO', 'ATENDENTE', 'FINANCEIRO']] = None
     ativo: Optional[bool] = None

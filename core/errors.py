@@ -1,6 +1,10 @@
+import logging
+import re
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from postgrest.exceptions import APIError
+
+log = logging.getLogger("mecanify.erros")
 
 ERROS_POSTGRES = {
     "23505": (409, "Conflito no mercado: Já existe um registro ativo com estes dados únicos (Ex: Placa, CPF/CNPJ, Email)."),
@@ -24,8 +28,15 @@ async def supabase_exception_handler(request: Request, exc: APIError):
         )
         return JSONResponse(status_code=400, content={"detail": msg})
 
+    if "22001" in erro_str:  # o Postgres não diz a coluna, só o tamanho: "character varying(30)"
+        m = re.search(r"varying\((\d+)\)", erro_str)
+        limite = f" (máximo de {m.group(1)} caracteres)" if m else ""
+        return JSONResponse(status_code=422, content={"detail": f"Um dos textos é maior que o permitido{limite}. Encurte e tente de novo."})
+
     for code, (status_code, msg) in ERROS_POSTGRES.items():
         if code in erro_str:
             return JSONResponse(status_code=status_code, content={"detail": msg})
 
-    return JSONResponse(status_code=400, content={"detail": f"Erro interno de transação: {erro_str}"})
+    # Erro que não conhecemos: o detalhe fica só no log do servidor (nunca o texto cru do banco para o cliente).
+    log.error("Erro de banco não mapeado em %s %s: %s", request.method, request.url.path, erro_str)
+    return JSONResponse(status_code=400, content={"detail": "Não foi possível concluir a operação. Tente de novo; se continuar, avise o suporte."})

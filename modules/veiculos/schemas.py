@@ -3,10 +3,10 @@ from typing import Optional
 from uuid import UUID
 
 class VeiculoBase(BaseModel):
-    placa: str
-    modelo: str
-    marca: Optional[str] = None
-    cor: Optional[str] = None
+    placa: str = Field(..., max_length=10)
+    modelo: str = Field(..., max_length=100)
+    marca: Optional[str] = Field(None, max_length=50)
+    cor: Optional[str] = Field(None, max_length=30)
     km_atual: Optional[int] = None
     ano: Optional[int] = None
     chassi: Optional[str] = None
@@ -17,10 +17,10 @@ class VeiculoCreate(VeiculoBase):
     pass
 
 class VeiculoUpdate(BaseModel):
-    placa: Optional[str] = None
-    modelo: Optional[str] = None
-    marca: Optional[str] = None
-    cor: Optional[str] = None
+    placa: Optional[str] = Field(None, max_length=10)
+    modelo: Optional[str] = Field(None, max_length=100)
+    marca: Optional[str] = Field(None, max_length=50)
+    cor: Optional[str] = Field(None, max_length=30)
     km_atual: Optional[int] = None
     ano: Optional[int] = None
     chassi: Optional[str] = None

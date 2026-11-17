@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from postgrest.exceptions import APIError
 from core.errors import supabase_exception_handler
 
+from modules.formas_pagamento import router as formas_pagamento_router
 from modules.clientes import router as clientes_router
 from modules.veiculos import router as veiculos_router
 from modules.os import router as os_router
@@ -59,6 +60,7 @@ app.include_router(dashboards_router.router, prefix="/api/v1/dashboards", tags=[
 app.include_router(financeiro_router.router, prefix="/api/v1/financeiro", tags=["Módulo Estratégico / Financeiro"])
 app.include_router(transacoes_financeiras_router.router, prefix="/api/v1/transacoes-financeiras", tags=["Contas a Pagar e Receber"])
 app.include_router(equipe_router.router, prefix="/api/v1/equipe", tags=["Equipe, RH e Ponto"])
+app.include_router(formas_pagamento_router.router, prefix="/api/v1/formas-pagamento", tags=["Formas de pagamento"])
 app.include_router(bot_router.router, prefix="/api/v1/bot", tags=["Bot de Atendimento"])
 
 

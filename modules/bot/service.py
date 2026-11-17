@@ -262,7 +262,7 @@ async def processar_e_injetar_audio(req: schemas.ProcessarAudioRequest):
             "empresa_id": req.empresa_id,
             "estoque_id": estoque_id,
             "tipo": item["tipo"],
-            "nome_item": item["nome_item"],
+            "nome_item": item["nome_item"][:200],  # coluna os_itens.nome_item é varchar(200)
             "quantidade": item["quantidade"],
             "venda_unitario": item["venda_unitario"],
             "custo_unitario": custo_unitario
