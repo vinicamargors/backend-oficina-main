@@ -6,7 +6,8 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from postgrest.exceptions import APIError
-from core.errors import supabase_exception_handler
+from fastapi.exceptions import RequestValidationError
+from core.errors import supabase_exception_handler, validacao_exception_handler
 
 from modules.formas_pagamento import router as formas_pagamento_router
 from modules.clientes import router as clientes_router
@@ -27,6 +28,7 @@ app = FastAPI(title="Oficina API", description="Monólito Modular focado em efic
 
 # Tradutor de erros do Supabase
 app.add_exception_handler(APIError, supabase_exception_handler)
+app.add_exception_handler(RequestValidationError, validacao_exception_handler)
 
 # Conexão com o Supabase caiu/expirou: 503 (a tela repete leituras), em vez de 500 sem cabeçalho CORS.
 async def _servico_indisponivel(request, exc):
