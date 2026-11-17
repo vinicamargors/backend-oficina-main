@@ -139,3 +139,11 @@ async def validacao_exception_handler(request: Request, exc: RequestValidationEr
         rotulo = "" if campo in ("body", "query", "path", "") else _rotulo(rota, campo)
         detalhe.append({"loc": loc, "msg": _mensagem(erro, rotulo), "type": erro.get("type", "")})
     return JSONResponse(status_code=422, content={"detail": detalhe})
+
+
+def erro_auth(e: Exception, padrao: str) -> str:
+    """Texto do provedor de login (em inglês, técnico) fica no log; o cliente recebe português da oficina."""
+    log.error("Erro do provedor de Auth: %s", e)
+    if any(p in str(e).lower() for p in ("already", "registered", "exists", "duplicate")):
+        return "Já existe um usuário com este e-mail."
+    return padrao

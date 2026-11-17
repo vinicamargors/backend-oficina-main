@@ -1,18 +1,22 @@
 import logging
 from fastapi import HTTPException
+from core.errors import erro_auth
 from core.database import supabase, supabase_admin
 from core.security import limpar_telefone
 from .schemas import UsuarioCreate, UsuarioUpdate
 
-log = logging.getLogger("mecanify.erros")
+_erro_auth = erro_auth
+PAGINA_AUTH, MAX_PAGINAS_AUTH = 200, 50  # a API de admin do Auth não filtra por e-mail: lê página a página e para no achado
 
 
-def _erro_auth(e: Exception, padrao: str) -> str:
-    """Texto do provedor de login (em inglês, técnico) fica no log; o cliente recebe português da oficina."""
-    log.error("Erro do provedor de Auth: %s", e)
-    if any(p in str(e).lower() for p in ("already", "registered", "exists", "duplicate")):
-        return "Já existe um usuário com este e-mail."
-    return padrao
+def _achar_auth_por_email(email: str):
+    """Login do Auth com este e-mail, sem baixar a lista inteira de uma vez (para ao achar; no máximo 10 mil logins)."""
+    for pagina in range(1, MAX_PAGINAS_AUTH + 1):
+        lote = supabase_admin.auth.admin.list_users(page=pagina, per_page=PAGINA_AUTH)
+        achou = next((u for u in lote if (getattr(u, "email", "") or "").lower() == email), None)
+        if achou or len(lote) < PAGINA_AUTH:
+            return achou
+    return None
 
 
 def listar_usuarios(empresa_id: str):
@@ -73,8 +77,7 @@ def atualizar_usuario(usuario_id: str, empresa_id: str, dados: UsuarioUpdate):
         # 2. Se não encontrou pelo ID (ex: usuário criado no banco sem ID correspondente no Auth), busca pelo email
         if not senha_sincronizada and user_email:
             try:
-                users_list = supabase_admin.auth.admin.list_users()
-                target_user = next((u for u in users_list if getattr(u, 'email', '').lower() == user_email), None)
+                target_user = _achar_auth_por_email(user_email)
                 if target_user:
                     supabase_admin.auth.admin.update_user_by_id(target_user.id, {"password": dados.senha})
                     senha_sincronizada = True

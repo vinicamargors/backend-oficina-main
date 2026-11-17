@@ -4,32 +4,32 @@ from uuid import UUID
 from datetime import datetime
 
 class EmpresaCreate(BaseModel):
-    nome_fantasia: str
-    razao_social: Optional[str] = None
-    cnpj: Optional[str] = None
-    email: Optional[EmailStr] = None
-    telefone: Optional[str] = None
-    endereco: Optional[str] = None
-    plano: str = "basico"
+    nome_fantasia: str = Field(..., min_length=1, max_length=150)
+    razao_social: Optional[str] = Field(None, max_length=150)
+    cnpj: Optional[str] = Field(None, max_length=20)
+    email: Optional[EmailStr] = Field(None, max_length=255)
+    telefone: Optional[str] = Field(None, max_length=30)
+    endereco: Optional[str] = Field(None, max_length=300)
+    plano: str = Field("basico", max_length=30)
     # Dados obrigatórios do Dono
-    nome_dono: str
-    email_dono: EmailStr
-    senha_dono: str = Field(..., min_length=6)
+    nome_dono: str = Field(..., min_length=1, max_length=100)  # usuarios.nome é varchar(100)
+    email_dono: EmailStr = Field(..., max_length=255)
+    senha_dono: str = Field(..., min_length=6, max_length=72)  # o Auth só lê até 72 bytes
 
 class EmpresaUpdate(BaseModel):
-    nome_fantasia: Optional[str] = None
-    razao_social: Optional[str] = None
-    cnpj: Optional[str] = None
-    email: Optional[EmailStr] = None
-    telefone: Optional[str] = None
-    endereco: Optional[str] = None
-    plano: Optional[str] = None
+    nome_fantasia: Optional[str] = Field(None, min_length=1, max_length=150)
+    razao_social: Optional[str] = Field(None, max_length=150)
+    cnpj: Optional[str] = Field(None, max_length=20)
+    email: Optional[EmailStr] = Field(None, max_length=255)
+    telefone: Optional[str] = Field(None, max_length=30)
+    endereco: Optional[str] = Field(None, max_length=300)
+    plano: Optional[str] = Field(None, max_length=30)
     ativo: Optional[bool] = None
 
 class ConfigUpdate(BaseModel):
-    nome_exibicao: Optional[str] = None
-    cor_primaria: Optional[str] = None
-    cor_secundaria: Optional[str] = None
+    nome_exibicao: Optional[str] = Field(None, max_length=150)
+    cor_primaria: Optional[str] = Field(None, max_length=20)
+    cor_secundaria: Optional[str] = Field(None, max_length=20)
     logo_b64: Optional[str] = None
     inscricao_estadual: Optional[str] = Field(None, max_length=50)
     whatsapp: Optional[str] = Field(None, max_length=30)
