@@ -12,6 +12,7 @@
 --   * updated_at com trigger nas tabelas principais
 --   * sai usuarios.senha_hash (legado Flask) e empresas.plano (vai para assinaturas)
 --   * novas: assinaturas, assinatura_pagamentos
+--   * inclui a view os_busca (migration 006, Fase 7)
 
 -- ------------------------------------------------------------------ funções de trigger
 CREATE FUNCTION public.set_updated_at() RETURNS trigger
@@ -383,6 +384,21 @@ BEGIN
   VALUES ('ordens_servico', 'DELETE', p_os::text, p_empresa, to_jsonb(os_row) || jsonb_build_object('motivo_exclusao', p_motivo));
   RETURN jsonb_build_object('status', 'sucesso');
 END $$;
+
+-- ------------------------------------------------------------------ busca de OS (igual à 006)
+CREATE OR REPLACE VIEW public.os_busca WITH (security_invoker = true) AS
+SELECT o.id, o.empresa_id, o.cliente_id, o.veiculo_id, o.km_atual, o.status, o.data_abertura,
+       o.total_geral, o.descricao_problema,
+       c.nome AS cliente_nome, c.telefone AS cliente_telefone,
+       v.placa AS veiculo_placa, v.modelo AS veiculo_modelo,
+       concat_ws(' ', c.nome, v.placa, v.modelo, o.id::text, o.descricao_problema) AS busca,
+       regexp_replace(coalesce(v.placa, ''), '[^a-zA-Z0-9]', '', 'g') AS placa_limpa
+  FROM public.ordens_servico o
+  LEFT JOIN public.clientes c ON c.id = o.cliente_id
+  LEFT JOIN public.veiculos v ON v.id = o.veiculo_id;
+
+REVOKE ALL ON public.os_busca FROM anon, authenticated;
+GRANT SELECT ON public.os_busca TO service_role;
 
 -- ------------------------------------------------------------------ acesso: só o backend
 -- RLS ligado sem policy + nenhum privilégio: a chave anon e o JWT do usuário não leem nem gravam nada.
