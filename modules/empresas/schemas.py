@@ -10,7 +10,7 @@ class EmpresaCreate(BaseModel):
     email: Optional[EmailStr] = Field(None, max_length=255)
     telefone: Optional[str] = Field(None, max_length=30)
     endereco: Optional[str] = Field(None, max_length=300)
-    plano: str = Field("basico", max_length=30)
+    plano: Literal["basico", "profissional"] = "basico"
     # Dados obrigatórios do Dono
     nome_dono: str = Field(..., min_length=1, max_length=100)  # usuarios.nome é varchar(100)
     email_dono: EmailStr = Field(..., max_length=255)
@@ -23,7 +23,7 @@ class EmpresaUpdate(BaseModel):
     email: Optional[EmailStr] = Field(None, max_length=255)
     telefone: Optional[str] = Field(None, max_length=30)
     endereco: Optional[str] = Field(None, max_length=300)
-    plano: Optional[str] = Field(None, max_length=30)
+    plano: Optional[Literal["basico", "profissional"]] = None
     ativo: Optional[bool] = None
 
 class ConfigUpdate(BaseModel):

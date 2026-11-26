@@ -99,8 +99,13 @@ def test_itens_da_os_e_estoque(api, token, seed_ids, admin):
 @pytest.mark.cenario("F3-W1b", "Item antigo do legado (sem empresa_id) pode ser alterado/removido pela própria empresa; a outra recebe 403/404")
 def test_item_legado_sem_empresa_id(api, token, seed_ids, admin):
     a, b = seed_ids["a"], seed_ids["b"]
-    item = admin.table("os_itens").insert({"os_id": a["os"], "tipo": "MAO_OBRA", "nome_item": "Legado F3-W1b",
-                                           "quantidade": 1, "custo_unitario": 0, "venda_unitario": 10}).execute().data[0]
+    try:
+        item = admin.table("os_itens").insert({"os_id": a["os"], "tipo": "MAO_OBRA", "nome_item": "Legado F3-W1b",
+                                               "quantidade": 1, "custo_unitario": 0, "venda_unitario": 10}).execute().data[0]
+    except Exception as e:
+        if "23502" in str(e):  # base nova: empresa_id é NOT NULL, item sem empresa não existe mais
+            pytest.skip("empresa_id NOT NULL na base nova")
+        raise
     assert item["empresa_id"] is None
     url_a = f"/api/v1/os/{a['empresa']}/{a['os']}/itens/{item['id']}"
     try:

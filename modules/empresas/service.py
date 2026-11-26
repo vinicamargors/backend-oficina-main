@@ -3,6 +3,7 @@ from fastapi import HTTPException
 from postgrest.exceptions import APIError
 from core.database import supabase, supabase_admin
 from core.errors import erro_auth
+from core.assinaturas import com_plano, gravar_plano
 from .schemas import EmpresaCreate, EmpresaUpdate, ConfigUpdate
 
 def listar_empresas(cargo: str, empresa_id: str):
@@ -10,7 +11,7 @@ def listar_empresas(cargo: str, empresa_id: str):
     query = supabase.table("empresas").select("*").order("nome_fantasia")
     if cargo != "master":
         query = query.eq("id", empresa_id)
-    return query.execute().data
+    return com_plano(query.execute().data)
 
 log = logging.getLogger("mecanify.erros")
 
@@ -43,11 +44,13 @@ def criar_empresa(dados: EmpresaCreate):
     """Empresa + configuração + login do dono + perfil. Se qualquer passo falhar, os anteriores são desfeitos."""
     feitos = []  # (nome, ação que desfaz)
     try:
-        empresa_data = dados.model_dump(exclude={"nome_dono", "email_dono", "senha_dono"}, mode='json')
+        empresa_data = dados.model_dump(exclude={"nome_dono", "email_dono", "senha_dono", "plano"}, mode='json')
         empresa_data["ativo"] = True
         empresa = supabase.table("empresas").insert(empresa_data).execute().data[0]
         empresa_id = empresa["id"]
-        feitos.append(("empresa", lambda: supabase.table("empresas").delete().eq("id", empresa_id).execute()))
+        feitos.append(("empresa", lambda: supabase.table("empresas").delete().eq("id", empresa_id).execute()))  # a assinatura cai em cascata
+        gravar_plano(empresa_id, dados.plano)
+        empresa["plano"] = dados.plano
 
         supabase.table("configuracoes_empresa").insert({
             "empresa_id": empresa_id,
@@ -95,14 +98,20 @@ def atualizar_empresa(empresa_id: str, cargo: str, dados: EmpresaUpdate):
     if cargo != "master":
         campos.pop("plano", None)
         campos.pop("ativo", None)
+    plano = campos.pop("plano", None)
 
-    if not campos:
+    if not campos and not plano:
         raise HTTPException(status_code=400, detail="Nenhum dado enviado para atualização.")
 
-    response = supabase.table("empresas").update(campos).eq("id", empresa_id).execute()
+    if campos:
+        response = supabase.table("empresas").update(campos).eq("id", empresa_id).execute()
+    else:  # só o plano mudou: confirma que a oficina existe
+        response = supabase.table("empresas").select("*").eq("id", empresa_id).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Empresa não encontrada.")
-    return response.data[0]
+    if plano:
+        gravar_plano(empresa_id, plano)
+    return com_plano(response.data)[0]
 
 # Tabelas com histórico da oficina. As quatro primeiras o banco já protege (FK sem cascade); transações o banco
 # apagaria em cascata, em silêncio, por isso também travam aqui.
@@ -160,7 +169,7 @@ def obter_detalhes(empresa_id: str):
         "ordens": supabase.table("ordens_servico").select("id", count="exact", head=True).eq("empresa_id", empresa_id).execute().count or 0,
     }
 
-    return {"empresa": emp_res[0], "configuracao": config[0] if config else {}, "usuarios": usuarios, "estatisticas": stats}
+    return {"empresa": com_plano(emp_res)[0], "configuracao": config[0] if config else {}, "usuarios": usuarios, "estatisticas": stats}
 
 def obter_configuracoes(empresa_id: str):
     config = supabase.table("configuracoes_empresa").select("*").eq("empresa_id", empresa_id).execute().data
