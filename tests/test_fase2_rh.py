@@ -24,13 +24,18 @@ def _h(tok):
 @pytest.mark.parametrize("coluna", ["salario_base", "comissao_servico_pct", "vale_transporte", "senha_hash"])
 def test_rh_nao_sai_pela_api_rest(http, token, cargo, coluna):
     r = _rest(http, token(cargo, "a"), "GET", f"usuarios?select={coluna}")
-    assert r.status_code in (401, 403)
-    assert "permission denied" in r.text
+    # base antiga: "permission denied"; base nova (100_esquema_sp): a coluna senha_hash nem existe (400) e o resto é negado
+    assert r.status_code in (400, 401, 403)
+    assert r.status_code != 400 or coluna == "senha_hash"
+    assert r.status_code == 400 or "permission denied" in r.text
 
 
 @pytest.mark.cenario("F2.2", "MECÂNICO continua lendo nome/cargo da equipe da própria oficina (e não da outra)")
 def test_mecanico_le_nomes_da_equipe(http, token, seed_ids):
     r = _rest(http, token("MECANICO", "a"), "GET", "usuarios?select=id,nome,cargo,empresa_id")
+    if r.status_code == 403:  # base nova: usuário logado não acessa tabela nenhuma; o front lê a equipe pelo backend
+        assert "permission denied" in r.text
+        return
     assert r.status_code == 200
     empresas = {u["empresa_id"] for u in r.json()}
     assert empresas == {seed_ids["a"]["empresa"]}

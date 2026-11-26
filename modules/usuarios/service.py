@@ -3,6 +3,7 @@ from fastapi import HTTPException
 from core.errors import erro_auth
 from core.database import supabase, supabase_admin
 from core.security import limpar_telefone
+from core.assinaturas import gravar_plano
 from .schemas import UsuarioCreate, UsuarioUpdate
 
 _erro_auth = erro_auth
@@ -153,9 +154,10 @@ def onboarding_oficina(auth_user):
 
     empresa = supabase.table("empresas").insert({
         "nome_fantasia": nome_oficina, "email": auth_user.email, "telefone": telefone,
-        "plano": "basico", "ativo": True,
+        "ativo": True,
     }).execute().data[0]
     try:
+        gravar_plano(empresa["id"])
         supabase.table("configuracoes_empresa").insert({
             "empresa_id": empresa["id"], "nome_exibicao": nome_oficina,
             "cor_primaria": "#1e3a8a", "cor_secundaria": "#f97316",

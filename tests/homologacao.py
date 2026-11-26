@@ -25,6 +25,10 @@ def carregar_env_test() -> bool:
     if not ENV_TEST.exists():
         return False
     load_dotenv(ENV_TEST, override=True)
+    if os.getenv("TESTES_BASE") == "mecanify":  # Fase 4.2: mesma suíte contra o projeto novo (São Paulo)
+        for destino, origem in (("SUPABASE_URL", "MECANIFY_SUPABASE_URL"), ("SUPABASE_SERVICE_KEY", "MECANIFY_SUPABASE_ROLE_KEY"),
+                                ("SUPABASE_ANON_KEY", "MECANIFY_SUPABASE_ANON_KEY")):
+            os.environ[destino] = os.environ[origem]
     return True
 
 
