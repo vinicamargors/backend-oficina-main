@@ -17,6 +17,7 @@ from fastapi import HTTPException
 from postgrest.exceptions import APIError
 from pydantic import ValidationError
 
+from core import assinaturas
 from modules.empresas import service as emp
 from modules.empresas.schemas import ConfigUpdate, EmpresaCreate, EmpresaUpdate
 from modules.usuarios import service as usu
@@ -35,6 +36,7 @@ class _Tabela:
     def update(self, d): self.op, self.payload = "update", d; return self
     def delete(self): self.op = "delete"; return self
     def eq(self, c, v): self.filtros.append((c, v)); return self
+    def in_(self, c, vs): self.filtros.append((c, vs)); return self  # com_plano: o fake só precisa devolver vazio
 
     def execute(self):
         b, linhas = self.b, self.b.t[self.nome]
@@ -72,7 +74,7 @@ class _Banco:
     'auth:create' | 'insert:usuarios' | 'auth:delete' | 'delete:<tabela>'."""
     def __init__(self):
         self.t = {n: [] for n in ("empresas", "configuracoes_empresa", "usuarios", "clientes", "veiculos", "ordens_servico",
-                                  "estoque", "transacoes_financeiras", "audit_logs")}
+                                  "estoque", "transacoes_financeiras", "audit_logs", "assinaturas")}
         self.auth, self.falhar, self.log = {}, None, []
         self.auth_api = SimpleNamespace(admin=_Admin(self))
     def chamada(self, nome):
@@ -87,6 +89,7 @@ def banco(monkeypatch):
     b = _Banco()
     monkeypatch.setattr(emp, "supabase", SimpleNamespace(table=b.table))
     monkeypatch.setattr(emp, "supabase_admin", SimpleNamespace(auth=b.auth_api))
+    monkeypatch.setattr(assinaturas, "supabase", SimpleNamespace(table=b.table))  # o plano vive em assinaturas
     return b
 
 
