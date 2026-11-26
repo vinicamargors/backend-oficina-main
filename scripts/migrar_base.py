@@ -5,6 +5,7 @@ Uso (as URLs de conexão vêm do ambiente, nunca da linha de comando nem do chat
     ORIGEM_DB_URL=... DESTINO_DB_URL=... python -m scripts.migrar_base --teste
     opções de escolha: --teste (só empresa_teste) | --empresa <uuid> | --todas
     --so-conferir   só valida a origem e mostra as contagens (não precisa do destino)
+    --sem-auditoria não copia audit_logs (para oficinas de teste: o histórico é ruído de teste de carga e pesa no plano gratuito)
     --substituir    apaga a oficina no destino e copia de novo. NUNCA depois do corte: apaga o que entrou na base nova.
 
 Garantias:
@@ -147,10 +148,11 @@ def criar_login_legado(destino, usuario):
         (usuario["id"], usuario["id"], Jsonb({"sub": usuario["id"], "email": usuario["email"], "email_verified": True})))
 
 
-def migrar_empresa(origem, destino, empresa, substituir):
+def migrar_empresa(origem, destino, empresa, substituir, sem_auditoria=False):
     """Uma oficina = uma transação. Devolve {tabela: linhas copiadas}."""
     param = {"e": empresa}
     _, sem_login = conferir_origem(origem, empresa)
+    tabelas = [t for t in TABELAS if not (sem_auditoria and t[0] == "public.audit_logs")]
     with destino.transaction():
         if destino.execute("select 1 from public.empresas where id = %(e)s", param).fetchone():
             if not substituir:
@@ -161,7 +163,7 @@ def migrar_empresa(origem, destino, empresa, substituir):
         # sem triggers durante a carga: não gera auditoria da própria migração nem mexe em updated_at
         destino.execute("set local session_replication_role = replica")
         copiadas = {}
-        for tabela, filtro, _ in TABELAS:
+        for tabela, filtro, _ in tabelas:
             forcar = {"empresa_id": empresa} if tabela in FORCAR_EMPRESA else None
             copiadas[tabela] = copiar(origem, destino, tabela, filtro, param, forcar)
         for u in sem_login:
@@ -173,7 +175,7 @@ def migrar_empresa(origem, destino, empresa, substituir):
         destino.execute("insert into public.assinaturas (empresa_id, plano) values (%s, %s)", (empresa, plano))
         destino.execute("set local session_replication_role = origin")
 
-        for tabela, filtro, filtro_destino in TABELAS:
+        for tabela, filtro, filtro_destino in tabelas:
             no_destino = destino.execute(f"select count(*) from {tabela} where {filtro_destino or filtro}", param).fetchone()[0]
             if no_destino != copiadas[tabela]:
                 raise RuntimeError(f"{tabela}: copiei {copiadas[tabela]} e o destino tem {no_destino}. Nada foi gravado.")
@@ -193,6 +195,7 @@ def main(argv=None):
     alvo.add_argument("--empresa", help="uma oficina, pelo id")
     alvo.add_argument("--todas", action="store_true")
     ap.add_argument("--so-conferir", action="store_true")
+    ap.add_argument("--sem-auditoria", action="store_true")
     ap.add_argument("--substituir", action="store_true")
     args = ap.parse_args(argv)
 
@@ -223,7 +226,7 @@ def main(argv=None):
     destino = psycopg.connect(os.environ["DESTINO_DB_URL"], autocommit=True)
     print("plataforma (masters):", migrar_masters(origem, destino))
     for eid, nome in empresas:
-        print(f"{nome}:", migrar_empresa(origem, destino, eid, args.substituir))
+        print(f"{nome}:", migrar_empresa(origem, destino, eid, args.substituir, args.sem_auditoria))
     print(f"OK: {len(empresas)} oficina(s) copiadas e conferidas.")
 
 
