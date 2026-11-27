@@ -74,3 +74,22 @@ def test_api_sobe_sem_chave_do_gemini():
     codigo = "import dotenv; dotenv.load_dotenv = lambda *a, **k: False; import main; from modules.bot import service; assert service.gemini_client is None"
     r = subprocess.run([sys.executable, "-c", codigo], cwd=Path(main.__file__).parent, env=env, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr[-400:]
+
+
+@pytest.mark.cenario("F42-6", "Scripts de backup/restauração são sintaxe bash válida, sem CRLF (quebra no Linux) e sem segredo escrito")
+def test_scripts_de_backup():
+    import re
+    import shutil
+    import subprocess
+    from pathlib import Path
+    deploy = Path(main.__file__).parent / "deploy"
+    arquivos = [deploy / "backup.sh", deploy / "restaurar-teste.sh", deploy / "atualizar.sh",
+                deploy / "systemd" / "autotec-backup.service", deploy / "systemd" / "autotec-backup.timer"]
+    for a in arquivos:
+        texto = a.read_bytes()
+        assert b"\r" not in texto, f"{a.name} com CRLF"
+        assert not re.search(rb"postgresql://[^\s$]+:[^\s$@]+@", texto), f"{a.name} parece ter senha de banco escrita"
+    if shutil.which("bash"):
+        for sh in arquivos[:3]:
+            r = subprocess.run(["bash", "-n", str(sh)], capture_output=True, text=True)
+            assert r.returncode == 0, f"{sh.name}: {r.stderr}"
