@@ -53,6 +53,32 @@ Copie o OCID do segredo para `SECRET_OCID` em `deploy/cloud-init.yaml`.
 - **Status do deploy:** `systemctl status autotec-deploy.service` e `journalctl -u autotec-deploy -n 50`.
 - **VM quebrada:** não conserte, recrie com o mesmo `cloud-init.yaml` (~10 min).
 
+## 6. Backup diário do banco (Fase 4.2)
+
+`deploy/backup.sh` roda todo dia às 03:00 (Brasília) pelo `autotec-backup.timer`, instalado pelo próprio `atualizar.sh`. Faz `pg_dump` dos
+schemas `public` e `auth` (dados + logins), confere o arquivo e sobe para o bucket. As duas VMs rodam; o nome do arquivo é o dia, então a
+segunda só sobrescreve a primeira.
+
+Configuração (uma vez, antes do corte):
+
+1. Bucket privado `autotec-backups` no compartment `autotec` (Standard, sem acesso público).
+2. Regra de ciclo de vida do bucket: apagar objetos com prefixo `mecanify/` após **30 dias**.
+3. Política: `Allow dynamic-group autotec-vms to manage objects in compartment autotec where target.bucket.name = 'autotec-backups'`
+   (e `read buckets` para o `os ns get`/listagem).
+4. No segredo do Vault, duas linhas novas (o valor da primeira é a conexão **Session pooler** do projeto, com a senha do banco; fica só no Vault):
+   ```
+   BACKUP_DB_URL=postgresql://postgres.<ref>:<senha>@aws-1-sa-east-1.pooler.supabase.com:5432/postgres
+   BACKUP_BUCKET=autotec-backups
+   ```
+   Atenção: o `api.env` inteiro vai para o container da API; ele passa a enxergar `BACKUP_DB_URL`. Trocar a senha do banco = editar o Vault.
+5. Conferir: `sudo systemctl start autotec-backup.service && journalctl -u autotec-backup -n 20` deve terminar com `backup ok: ...`.
+
+**Teste de restauração** (uma vez antes do corte e uma vez por mês): `sudo /opt/autotec/deploy/restaurar-teste.sh`. Restaura o último backup num
+Postgres descartável e compara as contagens com o banco vivo. Termina com código 0 só se todas baterem; diferença pequena logo depois de alguém
+gravar é normal, tabela vazia ou muito menor não é.
+
+Backup falhou: `journalctl -u autotec-backup -n 50`. Sem alarme ainda (item da 4.1: alarme por e-mail quando o arquivo do dia não existir).
+
 ## 5. Verificação rápida
 
 ```bash

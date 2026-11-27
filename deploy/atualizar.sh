@@ -24,6 +24,12 @@ git -C /opt/autotec remote set-url origin "$ORIGEM"
 git -C /opt/autotec fetch --quiet origin "$GIT_BRANCH"
 git -C /opt/autotec reset --quiet --hard "origin/$GIT_BRANCH"
 
+# Backup diario: VM antiga não tem as unidades (o cloud-init só roda no 1º boot), então instala daqui. Idempotente.
+chmod +x /opt/autotec/deploy/*.sh
+install -m 0644 /opt/autotec/deploy/systemd/autotec-backup.service /opt/autotec/deploy/systemd/autotec-backup.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now autotec-backup.timer >/dev/null 2>&1
+
 # 3) e 4) imagens. API_TAG / WEB_TAG (no segredo) fixam uma versão para rollback; sem elas, segue a main.
 # GHCR_READ_TOKEN também é opcional: imagens públicas no GHCR são baixadas sem login.
 if [ -n "${GHCR_READ_TOKEN:-}" ]; then
